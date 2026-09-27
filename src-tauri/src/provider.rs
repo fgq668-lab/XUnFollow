@@ -22,6 +22,7 @@ const MAX_FOLLOWING_PAGES: usize = 10_000;
 pub struct TwitterApiIo {
     client: Client,
     api_key: String,
+    base_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -144,7 +145,23 @@ impl TwitterApiIo {
             .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(|error| AppError::Network(error.to_string()))?;
-        Ok(Self { client, api_key })
+        Ok(Self {
+            client,
+            api_key,
+            base_url: BASE_URL.into(),
+        })
+    }
+
+    #[cfg(test)]
+    fn with_test_base_url(base_url: String) -> Self {
+        Self {
+            client: Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .expect("test HTTP client"),
+            api_key: "test-key".into(),
+            base_url: base_url.trim_end_matches('/').into(),
+        }
     }
 
     pub async fn estimate(
@@ -397,7 +414,7 @@ impl TwitterApiIo {
     }
 
     async fn get_json(&self, path: &str, params: &[(&str, &str)]) -> Result<Value, AppError> {
-        let url = format!("{BASE_URL}{path}");
+        let url = format!("{}{path}", self.base_url);
         let response = self
             .client
             .get(url)
@@ -667,7 +684,12 @@ fn format_micros(micros: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn checkpoint_db() -> (AppDb, std::path::PathBuf) {
         let nonce = SystemTime::now()
@@ -774,5 +796,54 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["200", "300"]
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mock_provider_scan_persists_a_deidentified_snapshot_end_to_end() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for _ in 0..3 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 4096];
+                let bytes = stream.read(&mut request).unwrap();
+                let request = String::from_utf8_lossy(&request[..bytes]);
+                let body = if request.contains("/twitter/user/info") {
+                    r#"{"status":"success","data":{"id":"1","userName":"fixture","name":"Fixture Account","followers":2,"following":3}}"#
+                } else if request.contains("/twitter/user/followers_ids") {
+                    r#"{"status":"success","ids":["100","101"],"has_next_page":false}"#
+                } else if request.contains("/twitter/user/followings") {
+                    r#"{"status":"success","followings":[{"id":"100","userName":"mutual","name":"Mutual","followers":1,"following":1},{"id":"200","userName":"cleanup_one","name":"Cleanup One","followers":1,"following":1},{"id":"300","userName":"cleanup_two","name":"Cleanup Two","followers":1,"following":1}],"has_next_page":false}"#
+                } else {
+                    panic!("unexpected mock Provider request: {request}");
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+            }
+        });
+
+        let (db, directory) = checkpoint_db();
+        let provider = TwitterApiIo::with_test_base_url(format!("http://{address}"));
+        provider.scan(&db, "fixture", 100_000, false).await.unwrap();
+        server.join().unwrap();
+
+        let snapshot = db.bootstrap(false).unwrap();
+        assert_eq!(snapshot.account.unwrap().username, "fixture");
+        assert_eq!(snapshot.summary.unwrap().non_followback_count, 2);
+        assert_eq!(
+            snapshot
+                .candidates
+                .iter()
+                .map(|item| item.username.as_str())
+                .collect::<Vec<_>>(),
+            vec!["cleanup_one", "cleanup_two"]
+        );
+        assert!(db.load_checkpoint().unwrap().is_none());
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }
