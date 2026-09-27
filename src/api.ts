@@ -42,6 +42,7 @@ const demoBootstrap: Bootstrap = {
   dailyGoal: 10,
   batchSize: 10,
   apiKeyConfigured: false,
+  syncRunning: false,
 };
 let demoState: Bootstrap = structuredClone(demoBootstrap);
 const demoEvents: Array<{ stableXId: string; previous?: Bootstrap["decisions"][string] }> = [];

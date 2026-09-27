@@ -3,7 +3,7 @@ import * as api from "./api";
 import type { Bootstrap, Candidate, DecisionStatus } from "./types";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.1.5";
+const APP_VERSION = "0.1.6";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",
@@ -147,7 +147,7 @@ function App() {
         <Stat value={number.format(state.candidates.length)} label="名单总数" />
       </section>
 
-      {state.pendingScan && <SyncProgress pendingScan={state.pendingScan} candidateCount={state.candidates.length} onOpenSettings={() => setShowSetup(true)} />}
+      {state.pendingScan && <SyncProgress pendingScan={state.pendingScan} syncRunning={state.syncRunning} candidateCount={state.candidates.length} onOpenSettings={() => setShowSetup(true)} />}
 
       {(!state.account && !state.pendingScan) || showSetup ? (
         <Setup
@@ -218,15 +218,16 @@ function Stat({ value, label }: { value: string; label: string }) {
   return <article><strong>{value}</strong><span>{label}</span></article>;
 }
 
-function SyncProgress({ pendingScan, candidateCount, onOpenSettings }: {
-  pendingScan: NonNullable<Bootstrap["pendingScan"]>; candidateCount: number; onOpenSettings: () => void;
+function SyncProgress({ pendingScan, syncRunning, candidateCount, onOpenSettings }: {
+  pendingScan: NonNullable<Bootstrap["pendingScan"]>; syncRunning: boolean; candidateCount: number; onOpenSettings: () => void;
 }) {
   const followerPages = Math.ceil(Math.max(0, pendingScan.followersTotal) / 5_000);
   const followingPages = Math.ceil(Math.max(0, pendingScan.followingTotal) / 200);
   const totalPages = followerPages + followingPages;
   const donePages = pendingScan.followerPages + pendingScan.followingPages;
   const progress = totalPages ? Math.min(100, Math.round(donePages / totalPages * 100)) : 0;
-  const status = pendingScan.needsExplicitRetry
+  const retryRequired = pendingScan.needsExplicitRetry && !syncRunning;
+  const status = retryRequired
     ? "上一页结果或计费不确定，同步已暂停。"
     : pendingScan.followingComplete
       ? "正在整理最后一批名单…"
@@ -234,7 +235,7 @@ function SyncProgress({ pendingScan, candidateCount, onOpenSettings }: {
         ? "正在读取正在关注列表，名单会边同步边出现。"
         : "正在读取关注者列表，完成后会开始生成名单。";
   return <section className="sync-panel" aria-live="polite">
-    <div className="sync-head"><div><p className="eyebrow">后台只读同步</p><h2>{pendingScan.needsExplicitRetry ? "同步需要你的确认" : `同步中 ${progress}%`}</h2></div><button onClick={onOpenSettings}>{pendingScan.needsExplicitRetry ? "查看并继续" : "同步设置"}</button></div>
+    <div className="sync-head"><div><p className="eyebrow">后台只读同步</p><h2>{retryRequired ? "同步需要你的确认" : `同步中 ${progress}%`}</h2></div><button onClick={onOpenSettings}>{retryRequired ? "查看并继续" : "同步设置"}</button></div>
     <div className="sync-progress-track"><div style={{ width: `${progress}%` }} /></div>
     <p>{status}</p>
     <div className="sync-metrics"><span>关注者 {number.format(pendingScan.followerIdsLoaded)} / {number.format(pendingScan.followersTotal || 0)}（{pendingScan.followerPages} 页）</span><span>正在关注 {number.format(pendingScan.followingProfilesLoaded)} / {number.format(pendingScan.followingTotal || 0)}（{pendingScan.followingPages} 页）</span><span>已可处理 {number.format(candidateCount)} 人</span></div>

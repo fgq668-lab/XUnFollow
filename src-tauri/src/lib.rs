@@ -25,7 +25,9 @@ struct AppState {
 
 #[tauri::command]
 fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, AppError> {
-    state.db.bootstrap()
+    let mut snapshot = state.db.bootstrap()?;
+    snapshot.sync_running = state.sync_running.load(Ordering::Acquire);
+    Ok(snapshot)
 }
 
 #[tauri::command]

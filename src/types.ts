@@ -44,6 +44,7 @@ export interface Bootstrap {
   dailyGoal: number;
   batchSize: number;
   apiKeyConfigured: boolean;
+  syncRunning: boolean;
   pendingScan?: {
     handle: string;
     hardCapUsd: string;

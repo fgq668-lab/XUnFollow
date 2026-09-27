@@ -127,7 +127,7 @@ impl AppDb {
                 |row| row.get::<_, String>(0),
             ).optional()?
                 .and_then(|raw| pending_scan_from_checkpoint(&raw));
-            Ok(Bootstrap { account, candidates, decisions, history, summary, daily_goal, batch_size: base_goal, api_key_configured, pending_scan })
+            Ok(Bootstrap { account, candidates, decisions, history, summary, daily_goal, batch_size: base_goal, api_key_configured, pending_scan, sync_running: false })
         })
     }
 

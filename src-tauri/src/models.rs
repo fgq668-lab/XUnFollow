@@ -99,6 +99,10 @@ pub struct Bootstrap {
     pub batch_size: i64,
     pub api_key_configured: bool,
     pub pending_scan: Option<PendingScan>,
+    /// True only while this app process has an active background Provider request.
+    /// A persisted `in_flight` checkpoint by itself means the previous process ended
+    /// before a response was known, so it must not be confused with this state.
+    pub sync_running: bool,
 }
 
 /// Metadata only: the API key and the Provider payload never leave the Rust core.
