@@ -253,11 +253,15 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
   const [estimate, setEstimate] = useState<{ text: string; handle: string; cap: string }>();
   const [busy, setBusy] = useState(false);
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const submittedKey = new FormData(event.currentTarget).get("apiKey");
+    const apiKeyToSave = typeof submittedKey === "string" ? submittedKey.trim() : "";
     setBusy(true);
     try {
-      if (apiKey) await api.saveApiKey(apiKey);
+      // Read the current form control as well as React state. macOS autofill can
+      // populate a password field without dispatching React's onChange event.
+      if (apiKeyToSave) await api.saveApiKey(apiKeyToSave);
       const cost = await api.estimateCost(handle, cap);
       setEstimate({ handle, cap, text: `预计费用约 $${money.format(Number(cost.estimatedUsd))}；硬上限 $${cost.hardCapUsd}。${cost.assumption}` });
     } catch (error) { setNotice(errorMessage(error, "无法验证设置")); }
@@ -283,7 +287,7 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
   return <section className="setup-panel">
     <div><p className="eyebrow">首次设置</p><h2>用自己的 API Key 建立本地名单</h2><p>Key 仅保存在本机安全存储；XUnFollow 不要求 X 密码、Cookie 或登录。</p></div>
     <form onSubmit={(event) => void submit(event)}>
-      <label>TwitterAPI.io API Key<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={configured ? "已保存；留空即可复用" : "粘贴你自己的 API Key"} required={!configured} /></label>
+      <label>TwitterAPI.io API Key<input name="apiKey" type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={configured ? "已保存；留空即可复用" : "粘贴你自己的 API Key"} required={!configured} /></label>
       <label>X 用户名<input value={handle} onChange={(event) => { setHandle(event.target.value.replace(/^@/, "")); setEstimate(undefined); }} placeholder="例如 guoqingfeng6" required /></label>
       <label>本次费用硬上限（美元）<input inputMode="decimal" value={cap} onChange={(event) => { setCap(event.target.value); setEstimate(undefined); }} required /></label>
       <div className="setup-actions"><button className="outline" type="button" onClick={onClose}>取消</button><button className="open-x" disabled={busy} type="submit">保存并估算费用</button></div>
