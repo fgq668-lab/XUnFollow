@@ -3,7 +3,7 @@ import * as api from "./api";
 import type { Bootstrap, Candidate, DecisionStatus } from "./types";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.1.1";
+const APP_VERSION = "0.1.2";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",

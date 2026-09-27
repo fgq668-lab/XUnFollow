@@ -1,6 +1,6 @@
 [package]
 name = "xunfollow"
-version = "0.1.1"
+version = "0.1.2"
 description = "A local-first X relationship cleanup assistant"
 authors = ["XUnFollow contributors"]
 edition = "2021"
@@ -15,7 +15,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
-keyring = "3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
 serde = { version = "1", features = ["derive"] }
@@ -25,3 +24,9 @@ tauri-plugin-opener = "2"
 thiserror = "2"
 tokio = { version = "1", features = ["time", "rt", "macros"] }
 url = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }

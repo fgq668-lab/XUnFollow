@@ -45,3 +45,43 @@ pub fn has_api_key() -> bool {
         })
         .is_ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_build_uses_native_keychain_backend() {
+        let item = entry().expect("create Keychain entry");
+        assert!(item
+            .get_credential()
+            .is::<keyring::macos::MacCredential>());
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn native_store_survives_a_fresh_entry() {
+        let service = format!("XUnFollow-test-{}", std::process::id());
+        let account = "native-round-trip";
+        let first = Entry::new(&service, account).expect("create first native entry");
+        first
+            .set_password("non-sensitive-test-value")
+            .expect("write native credential");
+
+        let second = Entry::new(&service, account).expect("create fresh native entry");
+        let loaded = second.get_password();
+        let _ = first.delete_credential();
+
+        assert_eq!(loaded.expect("read credential from fresh entry"), "non-sensitive-test-value");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_build_uses_native_credential_backend() {
+        let item = entry().expect("create Credential Manager entry");
+        assert!(item
+            .get_credential()
+            .is::<keyring::windows::WinCredential>());
+    }
+}
