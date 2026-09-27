@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "XUnFollow",
+  "version": "0.1.0",
+  "identifier": "com.fgq668lab.xunfollow",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "XUnFollow",
+        "width": 1180,
+        "height": 820,
+        "minWidth": 920,
+        "minHeight": 680,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' https://api.twitterapi.io; img-src 'self' data: https://pbs.twimg.com https://abs.twimg.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "本地优先的 X 关系清理助手",
+    "longDescription": "XUnFollow 在本机整理未回关账号，用户自行提供第三方 API Key。"
+  }
+}
+
