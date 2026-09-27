@@ -75,6 +75,9 @@ h2 { margin: 0; font-size: 28px; }
 .setup-panel form { display: grid; gap: 14px; }
 .setup-panel label { display: grid; gap: 7px; color: #514b45; font-size: 13px; font-weight: 680; }
 .setup-panel input { width: 100%; padding: 12px; border: 1px solid #ddd8cf; border-radius: 10px; outline: 0; background: #fff; }
+.setup-panel .secret-input { -webkit-text-security: disc; }
+.key-readback { color: #8a837b; font-size: 12px; font-weight: 560; }
+.key-readback.ready { color: #137e65; }
 .setup-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .outline { border: 1px solid #ddd8cf; border-radius: 12px; background: #fff; padding: 12px 16px; }
 .estimate { grid-column: 1 / -1; padding: 15px 17px; border-radius: 12px; background: #f8f4ed; color: #5d554d; }
