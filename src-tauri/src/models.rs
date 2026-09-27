@@ -108,6 +108,14 @@ pub struct PendingScan {
     pub handle: String,
     pub hard_cap_usd: String,
     pub needs_explicit_retry: bool,
+    pub follower_pages: usize,
+    pub following_pages: usize,
+    pub follower_ids_loaded: usize,
+    pub following_profiles_loaded: usize,
+    pub followers_total: i64,
+    pub following_total: i64,
+    pub follower_complete: bool,
+    pub following_complete: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

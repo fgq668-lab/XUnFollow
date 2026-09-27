@@ -3,7 +3,10 @@ mod error;
 mod models;
 mod provider;
 
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use db::AppDb;
 use error::AppError;
@@ -17,6 +20,7 @@ use url::Url;
 #[derive(Clone)]
 struct AppState {
     db: Arc<AppDb>,
+    sync_running: Arc<AtomicBool>,
 }
 
 #[tauri::command]
@@ -41,21 +45,18 @@ async fn estimate_cost(
 }
 
 #[tauri::command]
-async fn start_scan(
+fn start_scan(
     state: State<'_, AppState>,
     handle: String,
     hard_cap_usd: String,
 ) -> Result<(), AppError> {
     let cap = parse_usd_to_micros(&hard_cap_usd)?;
     let provider = TwitterApiIo::new(state.db.load_api_key()?)?;
-    let db = state.db.clone();
-    provider
-        .scan(&db, &normalise_handle(&handle)?, cap, false)
-        .await
+    launch_scan(&state, provider, normalise_handle(&handle)?, cap, false)
 }
 
 #[tauri::command]
-async fn resume_scan_once(
+fn resume_scan_once(
     state: State<'_, AppState>,
     handle: String,
     hard_cap_usd: String,
@@ -66,10 +67,29 @@ async fn resume_scan_once(
     }
     let cap = parse_usd_to_micros(&hard_cap_usd)?;
     let provider = TwitterApiIo::new(state.db.load_api_key()?)?;
+    launch_scan(&state, provider, normalise_handle(&handle)?, cap, true)
+}
+
+fn launch_scan(
+    state: &AppState,
+    provider: TwitterApiIo,
+    handle: String,
+    hard_cap_usd: i64,
+    acknowledge_ambiguous_retry: bool,
+) -> Result<(), AppError> {
+    TwitterApiIo::prepare_scan(&state.db, &handle, hard_cap_usd)?;
+    if state.sync_running.swap(true, Ordering::AcqRel) {
+        return Err(AppError::Validation("同步已在后台进行中".into()));
+    }
     let db = state.db.clone();
-    provider
-        .scan(&db, &normalise_handle(&handle)?, cap, true)
-        .await
+    let running = state.sync_running.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = provider
+            .scan(&db, &handle, hard_cap_usd, acknowledge_ambiguous_retry)
+            .await;
+        running.store(false, Ordering::Release);
+    });
+    Ok(())
 }
 
 #[tauri::command]
@@ -170,6 +190,7 @@ pub fn run() {
             let path = app.path().app_data_dir()?.join("xunfollow.sqlite3");
             app.manage(AppState {
                 db: Arc::new(AppDb::new(path)?),
+                sync_running: Arc::new(AtomicBool::new(false)),
             });
             Ok(())
         })

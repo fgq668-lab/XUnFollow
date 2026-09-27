@@ -3,7 +3,7 @@ import * as api from "./api";
 import type { Bootstrap, Candidate, DecisionStatus } from "./types";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.1.4";
+const APP_VERSION = "0.1.5";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",
@@ -46,6 +46,11 @@ function App() {
   };
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    if (!state?.pendingScan) return;
+    const timer = window.setInterval(() => void refresh(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [state?.pendingScan]);
 
   const counts = useMemo(() => {
     const result: Record<Tab, number> = { pending: 0, unfollowed: 0, keep: 0, later: 0, changed: 0 };
@@ -142,7 +147,9 @@ function App() {
         <Stat value={number.format(state.candidates.length)} label="名单总数" />
       </section>
 
-      {!state.account || showSetup ? (
+      {state.pendingScan && <SyncProgress pendingScan={state.pendingScan} candidateCount={state.candidates.length} onOpenSettings={() => setShowSetup(true)} />}
+
+      {(!state.account && !state.pendingScan) || showSetup ? (
         <Setup
           configured={state.apiKeyConfigured}
           pendingScan={state.pendingScan}
@@ -171,6 +178,8 @@ function App() {
               onOpen={() => void api.openExternalProfile(current.xUrl)}
               onDecision={(status) => void mutate(() => api.recordDecision(current.stableXId, status), status === "unfollowed" ? "已记录为取关" : "进度已保存")}
             />
+          ) : state.pendingScan ? (
+            <div className="empty-state"><p>正在边同步边生成名单；第一批未回关账号出现后，会自动显示在这里。</p></div>
           ) : (
             <div className="empty-state">
               {queue.length ? <>
@@ -207,6 +216,29 @@ function App() {
 
 function Stat({ value, label }: { value: string; label: string }) {
   return <article><strong>{value}</strong><span>{label}</span></article>;
+}
+
+function SyncProgress({ pendingScan, candidateCount, onOpenSettings }: {
+  pendingScan: NonNullable<Bootstrap["pendingScan"]>; candidateCount: number; onOpenSettings: () => void;
+}) {
+  const followerPages = Math.ceil(Math.max(0, pendingScan.followersTotal) / 5_000);
+  const followingPages = Math.ceil(Math.max(0, pendingScan.followingTotal) / 200);
+  const totalPages = followerPages + followingPages;
+  const donePages = pendingScan.followerPages + pendingScan.followingPages;
+  const progress = totalPages ? Math.min(100, Math.round(donePages / totalPages * 100)) : 0;
+  const status = pendingScan.needsExplicitRetry
+    ? "上一页结果或计费不确定，同步已暂停。"
+    : pendingScan.followingComplete
+      ? "正在整理最后一批名单…"
+      : pendingScan.followerComplete
+        ? "正在读取正在关注列表，名单会边同步边出现。"
+        : "正在读取关注者列表，完成后会开始生成名单。";
+  return <section className="sync-panel" aria-live="polite">
+    <div className="sync-head"><div><p className="eyebrow">后台只读同步</p><h2>{pendingScan.needsExplicitRetry ? "同步需要你的确认" : `同步中 ${progress}%`}</h2></div><button onClick={onOpenSettings}>{pendingScan.needsExplicitRetry ? "查看并继续" : "同步设置"}</button></div>
+    <div className="sync-progress-track"><div style={{ width: `${progress}%` }} /></div>
+    <p>{status}</p>
+    <div className="sync-metrics"><span>关注者 {number.format(pendingScan.followerIdsLoaded)} / {number.format(pendingScan.followersTotal || 0)}（{pendingScan.followerPages} 页）</span><span>正在关注 {number.format(pendingScan.followingProfilesLoaded)} / {number.format(pendingScan.followingTotal || 0)}（{pendingScan.followingPages} 页）</span><span>已可处理 {number.format(candidateCount)} 人</span></div>
+  </section>;
 }
 
 function CandidateCard({ candidate, busy, onOpen, onDecision }: {
@@ -289,14 +321,14 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
       return;
     }
     setBusy(true);
-    try { await api.startScan(handle, cap); onSaved(); }
+    try { await api.startScan(handle, cap); setNotice("后台同步已开始；名单会边同步边出现。"); onSaved(); }
     catch (error) { setNotice(errorMessage(error, "同步没有开始")); }
     finally { setBusy(false); }
   };
   const resume = async () => {
     if (!pendingScan) return;
     setBusy(true);
-    try { await api.resumeScanOnce(handle, cap); onSaved(); }
+    try { await api.resumeScanOnce(handle, cap); setNotice("后台同步已继续；名单会边同步边出现。"); onSaved(); }
     catch (error) { setNotice(errorMessage(error, "恢复同步失败")); }
     finally { setBusy(false); }
   };

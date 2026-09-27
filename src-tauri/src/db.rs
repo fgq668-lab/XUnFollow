@@ -372,6 +372,42 @@ fn pending_scan_from_checkpoint(raw: &str) -> Option<PendingScan> {
         handle,
         hard_cap_usd: format!("{}.{:06}", micros / 1_000_000, micros.rem_euclid(1_000_000)),
         needs_explicit_retry: value.get("in_flight").is_some_and(|item| !item.is_null()),
+        follower_pages: value
+            .get("follower_pages")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize,
+        following_pages: value
+            .get("following_pages")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize,
+        follower_ids_loaded: value
+            .get("follower_ids")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0),
+        following_profiles_loaded: value
+            .get("following_profiles")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0),
+        followers_total: value
+            .get("identity")
+            .and_then(|item| item.get("followers_count"))
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0),
+        following_total: value
+            .get("identity")
+            .and_then(|item| item.get("following_count"))
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0),
+        follower_complete: value
+            .get("follower_complete")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        following_complete: value
+            .get("following_complete")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
     })
 }
 

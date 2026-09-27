@@ -193,6 +193,29 @@ impl TwitterApiIo {
         })
     }
 
+    pub fn prepare_scan(db: &AppDb, handle: &str, hard_cap_micros: i64) -> Result<(), AppError> {
+        validate_handle(handle)?;
+        match db.load_checkpoint()? {
+            Some(raw) => {
+                let checkpoint: Checkpoint = serde_json::from_str(&raw)
+                    .map_err(|_| AppError::Provider("本地检查点格式无效".into()))?;
+                if checkpoint.handle != handle || checkpoint.hard_cap_micros != hard_cap_micros {
+                    return Err(AppError::Validation(
+                        "已有未完成任务与当前账号或费用上限不一致".into(),
+                    ));
+                }
+            }
+            None => {
+                let checkpoint = Checkpoint::new(handle.into(), hard_cap_micros);
+                db.save_checkpoint(
+                    &serde_json::to_string(&checkpoint)
+                        .map_err(|error| AppError::Provider(error.to_string()))?,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn scan(
         &self,
         db: &AppDb,
@@ -327,9 +350,11 @@ impl TwitterApiIo {
                 state.following_cursor = page.next_cursor;
             }
             state.settle(db, profile_page_cost(page_count)?)?;
+            let (account, summary, candidates) = partial_snapshot(&state)?;
+            db.replace_snapshot(&account, &summary, &candidates)?;
         }
 
-        let (account, summary, candidates) = complete_snapshot(state)?;
+        let (account, summary, candidates) = complete_snapshot(&state)?;
         db.replace_snapshot(&account, &summary, &candidates)?;
         db.clear_checkpoint()?;
         Ok(())
@@ -456,18 +481,38 @@ impl TwitterApiIo {
 }
 
 fn complete_snapshot(
-    mut state: Checkpoint,
+    state: &Checkpoint,
 ) -> Result<(Account, ScanSummary, Vec<Candidate>), AppError> {
     if !state.follower_complete || !state.following_complete || state.in_flight.is_some() {
         return Err(AppError::Provider(
             "扫描检查点尚未完成，不能生成名单".into(),
         ));
     }
+    snapshot_from_state(state, true)
+}
+
+fn partial_snapshot(
+    state: &Checkpoint,
+) -> Result<(Account, ScanSummary, Vec<Candidate>), AppError> {
+    if !state.follower_complete {
+        return Err(AppError::Provider("关注者名单尚未读取完成".into()));
+    }
+    snapshot_from_state(state, false)
+}
+
+fn snapshot_from_state(
+    state: &Checkpoint,
+    complete: bool,
+) -> Result<(Account, ScanSummary, Vec<Candidate>), AppError> {
     let identity = state
         .identity
-        .take()
+        .as_ref()
         .ok_or_else(|| AppError::Provider("身份检查点缺失".into()))?;
-    let following_count = state.following_profiles.len() as i64;
+    let following_count = if complete {
+        state.following_profiles.len() as i64
+    } else {
+        identity.following_count
+    };
     let maximum_micros = state
         .confirmed_micros
         .checked_add(state.uncertain_micros)
@@ -475,22 +520,27 @@ fn complete_snapshot(
     let followers: HashSet<&str> = state.follower_ids.iter().map(String::as_str).collect();
     let candidates: Vec<Candidate> = state
         .following_profiles
-        .into_iter()
+        .iter()
+        .cloned()
         .filter(|profile| !followers.contains(profile.stable_x_id.as_str()))
         .collect();
     let summary = ScanSummary {
         captured_at: Some(chrono::Utc::now().to_rfc3339()),
-        followers_count: state.follower_ids.len() as i64,
+        followers_count: if complete {
+            state.follower_ids.len() as i64
+        } else {
+            identity.followers_count
+        },
         following_count,
         non_followback_count: candidates.len() as i64,
         confirmed_cost_usd: format_micros(state.confirmed_micros),
         maximum_possible_cost_usd: format_micros(maximum_micros),
-        complete: true,
+        complete,
     };
     Ok((
         Account {
-            username: identity.username,
-            name: Some(identity.name),
+            username: identity.username.clone(),
+            name: Some(identity.name.clone()),
         },
         summary,
         candidates,
@@ -814,7 +864,7 @@ mod tests {
         state.confirmed_micros = 50_000;
         state.uncertain_micros = 4_000;
 
-        let (account, summary, candidates) = complete_snapshot(state).unwrap();
+        let (account, summary, candidates) = complete_snapshot(&state).unwrap();
         assert_eq!(account.username, "fixture");
         assert_eq!(summary.followers_count, 2);
         assert_eq!(summary.following_count, 3);
@@ -828,6 +878,35 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["200", "300"]
         );
+    }
+
+    #[test]
+    fn partial_snapshot_exposes_actionable_candidates_before_scan_completes() {
+        let mut state = Checkpoint::new("fixture".into(), 100_000);
+        state.identity = Some(ResolvedAccount {
+            stable_x_id: "1".into(),
+            username: "fixture".into(),
+            name: "Fixture Account".into(),
+            followers_count: 2,
+            following_count: 3,
+        });
+        state.follower_ids = vec!["100".into(), "101".into()];
+        state.follower_complete = true;
+        state.following_profiles = vec![Candidate {
+            stable_x_id: "200".into(),
+            username: "cleanup_one".into(),
+            name: "Cleanup One".into(),
+            profile_image_url: None,
+            followers_count: 1,
+            following_count: 1,
+            x_url: "https://x.com/cleanup_one".into(),
+        }];
+
+        let (_, summary, candidates) = partial_snapshot(&state).unwrap();
+        assert!(!summary.complete);
+        assert_eq!(summary.following_count, 3);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].username, "cleanup_one");
     }
 
     #[tokio::test(flavor = "current_thread")]

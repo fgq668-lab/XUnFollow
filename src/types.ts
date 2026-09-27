@@ -48,6 +48,14 @@ export interface Bootstrap {
     handle: string;
     hardCapUsd: string;
     needsExplicitRetry: boolean;
+    followerPages: number;
+    followingPages: number;
+    followerIdsLoaded: number;
+    followingProfilesLoaded: number;
+    followersTotal: number;
+    followingTotal: number;
+    followerComplete: boolean;
+    followingComplete: boolean;
   };
 }
 
