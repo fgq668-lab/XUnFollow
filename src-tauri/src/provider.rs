@@ -425,8 +425,12 @@ impl TwitterApiIo {
             .map_err(|error| AppError::Network(error.to_string()))?;
         let status = response.status();
         if status != StatusCode::OK {
+            let body = response.text().await.unwrap_or_default();
+            let detail = safe_provider_error_message(&body)
+                .map(|message| format!("：{message}"))
+                .unwrap_or_default();
             return Err(AppError::Network(format!(
-                "Provider HTTP {}",
+                "Provider HTTP {}{detail}",
                 status.as_u16()
             )));
         }
@@ -681,6 +685,25 @@ fn format_micros(micros: i64) -> String {
     format!("{}.{:06}", micros / 1_000_000, micros.rem_euclid(1_000_000))
 }
 
+fn safe_provider_error_message(body: &str) -> Option<String> {
+    let payload: Value = serde_json::from_str(body).ok()?;
+    let message = ["message", "msg", "detail", "error"]
+        .iter()
+        .find_map(|key| payload.get(*key).and_then(Value::as_str))?;
+    let cleaned: String = message
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .take(180)
+        .collect();
+    (!cleaned.trim().is_empty()).then(|| cleaned)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -705,6 +728,15 @@ mod tests {
         assert_eq!(ids_page_cost(5000).unwrap(), 22_500);
         assert_eq!(ids_page_cost(4563).unwrap(), 20_534);
         assert_eq!(profile_page_cost(200).unwrap(), 2_000);
+    }
+
+    #[test]
+    fn provider_error_detail_is_bounded_and_optional() {
+        assert_eq!(
+            safe_provider_error_message(r#"{"message":"invalid API key"}"#).as_deref(),
+            Some("invalid API key")
+        );
+        assert!(safe_provider_error_message("not json").is_none());
     }
     #[test]
     fn rejects_invalid_handle() {

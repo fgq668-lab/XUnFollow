@@ -16,6 +16,13 @@ const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: Intl.DateTimeFo
 const money = new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const number = new Intl.NumberFormat("zh-CN");
 
+function errorMessage(error: unknown, fallback: string) {
+  if (typeof error === "string" && error.trim()) return error;
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message) return error.message;
+  return fallback;
+}
+
 function decisionOf(state: Bootstrap, candidate: Candidate): DecisionStatus {
   return state.decisions[candidate.stableXId]?.status ?? "pending";
 }
@@ -33,7 +40,7 @@ function App() {
     try {
       setState(await api.bootstrap());
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "无法读取本地数据");
+      setNotice(errorMessage(error, "无法读取本地数据"));
     }
   };
 
@@ -69,7 +76,7 @@ function App() {
       await refresh();
       if (success) setNotice(success);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "本地保存失败");
+      setNotice(errorMessage(error, "本地保存失败"));
     } finally {
       setBusy(false);
     }
@@ -92,7 +99,7 @@ function App() {
       await refresh();
       setNotice(`已导入 ${accepted} 条与当前名单匹配的进度`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "导入失败");
+      setNotice(errorMessage(error, "导入失败"));
     } finally {
       setBusy(false);
     }
@@ -253,7 +260,7 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
       if (apiKey) await api.saveApiKey(apiKey);
       const cost = await api.estimateCost(handle, cap);
       setEstimate({ handle, cap, text: `预计费用约 $${money.format(Number(cost.estimatedUsd))}；硬上限 $${cost.hardCapUsd}。${cost.assumption}` });
-    } catch (error) { setNotice(error instanceof Error ? error.message : "无法验证设置"); }
+    } catch (error) { setNotice(errorMessage(error, "无法验证设置")); }
     finally { setBusy(false); }
   };
   const scan = async () => {
@@ -263,14 +270,14 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
     }
     setBusy(true);
     try { await api.startScan(handle, cap); onSaved(); }
-    catch (error) { setNotice(error instanceof Error ? error.message : "同步没有开始"); }
+    catch (error) { setNotice(errorMessage(error, "同步没有开始")); }
     finally { setBusy(false); }
   };
   const resume = async () => {
     if (!pendingScan) return;
     setBusy(true);
     try { await api.resumeScanOnce(handle, cap); onSaved(); }
-    catch (error) { setNotice(error instanceof Error ? error.message : "恢复同步失败"); }
+    catch (error) { setNotice(errorMessage(error, "恢复同步失败")); }
     finally { setBusy(false); }
   };
   return <section className="setup-panel">
