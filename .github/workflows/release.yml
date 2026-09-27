@@ -1,0 +1,90 @@
+name: 发布桌面安装包
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: macOS (${{ matrix.name }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple Silicon
+            target: aarch64-apple-darwin
+          - name: Intel
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: pnpm tauri build --bundles dmg --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xunfollow-macos-${{ matrix.target }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: pnpm tauri build --bundles nsis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xunfollow-windows-x64
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  publish:
+    name: 创建 GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## XUnFollow 桌面版
+
+            - **Apple Silicon Mac（M1/M2/M3/M4）**：下载 `aarch64-apple-darwin` 的 DMG。
+            - **Intel Mac**：下载 `x86_64-apple-darwin` 的 DMG。
+            - **Windows 10/11 x64**：下载 `.exe` 安装包。
+
+            这是本地优先应用：名单、处理进度和 API Key 只保存在用户电脑。应用不会自动取关；请在外部 X 页面自行确认操作。
+
+            当前安装包尚未使用 Apple Developer ID 或 Windows 代码签名证书。系统首次打开可能显示未知开发者提示；请仅从本 Release 下载，并在确认仓库来源后继续安装。
+          files: release-assets/*

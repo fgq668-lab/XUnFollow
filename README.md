@@ -53,6 +53,18 @@ XUnFollow 帮你找出“你关注、但对方没有关注你”的账号，并�
 
 正常情况下，后台同步会持续更新页面，直到名单完成。如果在 Provider 请求中关闭了应用或网络中断，下一次打开时会保留已同步的名单和进度。由于最后一个请求的计费结果可能不确定，应用会要求你手动确认一次“继续”，而不会擅自重试或超出费用上限。
 
+## 下载与系统选择
+
+每次推送形如 `v0.1.6` 的版本标签时，GitHub Actions 会自动创建一个 [Release](https://github.com/fgq668-lab/XUnFollow/releases)，并附上以下安装包：
+
+| 你的电脑 | 下载哪个文件 |
+| --- | --- |
+| Mac，M1/M2/M3/M4 芯片 | 文件名含 `aarch64-apple-darwin` 的 `.dmg` |
+| Mac，Intel 芯片 | 文件名含 `x86_64-apple-darwin` 的 `.dmg` |
+| Windows 10/11，64 位 | `.exe`（NSIS 安装程序） |
+
+当前开源版本使用 ad-hoc 构建，尚未配置 Apple Developer ID 公证或 Windows 商业代码签名。因此系统可能在首次打开时显示“无法验证开发者”或“Windows 已保护你的电脑”。请只从本仓库的 Release 下载，并核对发布版本；正式面向广泛用户分发前，建议配置两端的代码签名。
+
 ## 本地构建与开发
 
 前置条件：Node.js 20+、pnpm 10+、Rust stable、以及 macOS 的 Xcode Command Line Tools 或 Windows 的 Microsoft C++ Build Tools/WebView2。Tauri 的具体前置条件见其官方文档。
@@ -77,6 +89,23 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml
 pnpm tauri build
 ```
+
+### Windows 本地编译
+
+推荐直接在 Windows 10/11 x64 上构建，不建议从 macOS 交叉编译 Windows 安装程序。先安装 Node.js 22+、pnpm 10+、Rust stable（`x86_64-pc-windows-msvc`），以及 Visual Studio 2022 Build Tools 中的“Desktop development with C++”与 Windows SDK；确保系统有 Microsoft Edge WebView2 Runtime。
+
+在 PowerShell 中执行：
+
+```powershell
+git clone https://github.com/fgq668-lab/XUnFollow.git
+cd XUnFollow
+pnpm install --frozen-lockfile
+pnpm check
+cargo test --manifest-path src-tauri/Cargo.toml
+pnpm tauri build --bundles nsis
+```
+
+生成的安装程序在 `src-tauri\\target\\release\\bundle\\nsis\\` 目录。GitHub Actions 也会在每个版本标签上自动执行同一类 Windows 构建。
 
 浏览器开发模式使用完全脱敏的演示数据，绝不会发出 Provider 请求。只有 Tauri 桌面进程才会访问本地数据库和 Provider。
 
