@@ -4,8 +4,6 @@ use thiserror::Error;
 pub enum AppError {
     #[error("本地数据库错误：{0}")]
     Database(#[from] rusqlite::Error),
-    #[error("安全存储不可用：{0}")]
-    SecureStore(String),
     #[error("网络请求失败：{0}")]
     Network(String),
     #[error("Provider 响应无效：{0}")]

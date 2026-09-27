@@ -1,6 +1,6 @@
 [package]
 name = "xunfollow"
-version = "0.1.3"
+version = "0.1.4"
 description = "A local-first X relationship cleanup assistant"
 authors = ["XUnFollow contributors"]
 edition = "2021"
@@ -24,9 +24,3 @@ tauri-plugin-opener = "2"
 thiserror = "2"
 tokio = { version = "1", features = ["time", "rt", "macros"] }
 url = "2"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-keyring = { version = "3", features = ["apple-native"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-keyring = { version = "3", features = ["windows-native"] }

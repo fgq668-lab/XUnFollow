@@ -3,7 +3,7 @@ import * as api from "./api";
 import type { Bootstrap, Candidate, DecisionStatus } from "./types";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.1.3";
+const APP_VERSION = "0.1.4";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",
@@ -301,7 +301,7 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
     finally { setBusy(false); }
   };
   return <section className="setup-panel">
-    <div><p className="eyebrow">首次设置 · 修复版 {APP_VERSION}</p><h2>用自己的 API Key 建立本地名单</h2><p>Key 仅保存在本机安全存储；XUnFollow 不要求 X 密码、Cookie 或登录。</p></div>
+    <div><p className="eyebrow">首次设置 · 修复版 {APP_VERSION}</p><h2>用自己的 API Key 建立本地名单</h2><p>Key 仅保存在本机 XUnFollow 数据库，不上传，也不会包含在导出的进度文件中。</p></div>
     <form onSubmit={(event) => void submit(event)}>
       <label>
         TwitterAPI.io API Key
@@ -318,7 +318,7 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
           required={!configured}
         />
         <span className={keyLength ? "key-readback ready" : "key-readback"}>
-          {keyLength ? `已读取 ${keyLength} 个字符，可以保存` : configured ? "已保存到系统安全存储；留空可继续使用" : "尚未读取到 Key"}
+          {keyLength ? `已读取 ${keyLength} 个字符，可以保存` : configured ? "已保存到本机数据库；留空可继续使用" : "尚未读取到 Key"}
         </span>
       </label>
       <label>X 用户名<input value={handle} onChange={(event) => { setHandle(event.target.value.replace(/^@/, "")); setEstimate(undefined); }} placeholder="例如 guoqingfeng6" required /></label>

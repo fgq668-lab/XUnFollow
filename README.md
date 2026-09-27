@@ -10,7 +10,7 @@ XUnFollow 帮你找出“你关注、但对方没有关注你”的账号，并�
 
 - 不需要注册 XUnFollow 账号，也没有云端用户数据库。
 - SQLite 名单、处理历史、费用账本与分页检查点只留在本机。
-- API Key 保存在 macOS Keychain 或 Windows Credential Manager；不会写入 SQLite、日志、导出文件或源码。
+- API Key 仅保存在当前电脑的 XUnFollow SQLite 数据库；不会上传、写入日志、包含在导出文件或提交进源码。
 - 只有同步关系数据和打开 X 资料页需要联网。
 - API 调用直接从你的电脑发往 Provider；费用由你的 Provider 账户直接结算。
 
@@ -57,12 +57,12 @@ cargo test --manifest-path src-tauri/Cargo.toml
 pnpm tauri build
 ```
 
-浏览器开发模式使用完全脱敏的演示数据，绝不会发出 Provider 请求。只有 Tauri 桌面进程才会访问本地安全存储和 Provider。
+浏览器开发模式使用完全脱敏的演示数据，绝不会发出 Provider 请求。只有 Tauri 桌面进程才会访问本地数据库和 Provider。
 
 ## 用户流程
 
 1. 在 TwitterAPI.io 注册并给自己的账户充值。
-2. 在 XUnFollow 中粘贴自己的 API Key；应用只写入本机系统安全存储。
+2. 在 XUnFollow 中粘贴自己的 API Key；应用只写入本机 XUnFollow 数据库。
 3. 输入 X 用户名和本次同步的费用硬上限。
 4. 阅读预估费用，确认后开始只读同步。
 5. 打开每个外部 X 页面，自己决定是否取关。

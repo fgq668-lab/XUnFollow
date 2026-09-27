@@ -11,6 +11,8 @@ use crate::{
     },
 };
 
+const API_KEY_SETTING: &str = "provider_api_key";
+
 #[derive(Clone)]
 pub struct AppDb {
     path: PathBuf,
@@ -63,8 +65,9 @@ impl AppDb {
         Ok(db)
     }
 
-    pub fn bootstrap(&self, api_key_configured: bool) -> Result<Bootstrap, AppError> {
+    pub fn bootstrap(&self) -> Result<Bootstrap, AppError> {
         self.with_connection(|connection| {
+            let api_key_configured = setting_text(connection, API_KEY_SETTING)?.is_some_and(|key| !key.is_empty());
             let base_goal = setting_i64(connection, "daily_goal")?.unwrap_or(10);
             let daily_key = format!("daily_goal:{}", today());
             let daily_goal = setting_i64(connection, &daily_key)?.unwrap_or(base_goal);
@@ -125,6 +128,28 @@ impl AppDb {
             ).optional()?
                 .and_then(|raw| pending_scan_from_checkpoint(&raw));
             Ok(Bootstrap { account, candidates, decisions, history, summary, daily_goal, batch_size: base_goal, api_key_configured, pending_scan })
+        })
+    }
+
+    pub fn save_api_key(&self, api_key: &str) -> Result<(), AppError> {
+        let key = api_key.trim();
+        if key.is_empty() || key.len() > 1024 {
+            return Err(AppError::Validation("API Key 无效".into()));
+        }
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO settings(key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                params![API_KEY_SETTING, key],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn load_api_key(&self) -> Result<String, AppError> {
+        self.with_connection(|connection| {
+            setting_text(connection, API_KEY_SETTING)?
+                .filter(|key| !key.is_empty())
+                .ok_or_else(|| AppError::Validation("还没有保存 TwitterAPI.io API Key".into()))
         })
     }
 
@@ -297,6 +322,11 @@ impl AppDb {
             std::fs::create_dir_all(parent).map_err(|error| {
                 AppError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
             })?;
+            #[cfg(unix)]
+            std::fs::set_permissions(parent, std::os::unix::fs::PermissionsExt::from_mode(0o700))
+                .map_err(|error| {
+                AppError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+            })?;
         }
         let mut connection = Connection::open(&self.path)?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
@@ -413,11 +443,11 @@ mod tests {
         let id = "200000000000000000";
         db.record_decision(id, "unfollowed").unwrap();
         assert_eq!(
-            db.bootstrap(false).unwrap().decisions[id].status,
+            db.bootstrap().unwrap().decisions[id].status,
             DecisionStatus::Unfollowed
         );
         db.undo_last().unwrap();
-        assert!(db.bootstrap(false).unwrap().decisions.is_empty());
+        assert!(db.bootstrap().unwrap().decisions.is_empty());
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -429,7 +459,7 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(db.continue_batch().unwrap(), 20);
-        assert_eq!(db.bootstrap(false).unwrap().daily_goal, 20);
+        assert_eq!(db.bootstrap().unwrap().daily_goal, 20);
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -438,7 +468,7 @@ mod tests {
         let (db, directory) = fixture_db(0);
         db.save_checkpoint(r#"{"handle":"fixture","hard_cap_micros":500000,"in_flight":{"endpoint":"/twitter/user/followings"}}"#)
             .unwrap();
-        let pending = db.bootstrap(false).unwrap().pending_scan.unwrap();
+        let pending = db.bootstrap().unwrap().pending_scan.unwrap();
         assert_eq!(pending.handle, "fixture");
         assert_eq!(pending.hard_cap_usd, "0.500000");
         assert!(pending.needs_explicit_retry);
@@ -465,9 +495,18 @@ mod tests {
             ),
         ]);
         assert_eq!(db.import_decisions(imported).unwrap(), 1);
-        let decision = &db.bootstrap(false).unwrap().decisions["200000000000000000"];
+        let decision = &db.bootstrap().unwrap().decisions["200000000000000000"];
         assert_eq!(decision.status, DecisionStatus::Keep);
         assert_eq!(decision.action_day, "2026-09-01");
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn stores_api_key_in_the_local_database() {
+        let (db, directory) = fixture_db(0);
+        db.save_api_key("test-local-api-key").unwrap();
+        assert_eq!(db.load_api_key().unwrap(), "test-local-api-key");
+        assert!(db.bootstrap().unwrap().api_key_configured);
         std::fs::remove_dir_all(directory).unwrap();
     }
 }

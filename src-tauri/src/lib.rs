@@ -2,7 +2,6 @@ mod db;
 mod error;
 mod models;
 mod provider;
-mod security;
 
 use std::sync::Arc;
 
@@ -22,18 +21,22 @@ struct AppState {
 
 #[tauri::command]
 fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, AppError> {
-    state.db.bootstrap(security::has_api_key())
+    state.db.bootstrap()
 }
 
 #[tauri::command]
-fn save_api_key(api_key: String) -> Result<(), AppError> {
-    security::save_api_key(&api_key)
+fn save_api_key(state: State<'_, AppState>, api_key: String) -> Result<(), AppError> {
+    state.db.save_api_key(&api_key)
 }
 
 #[tauri::command]
-async fn estimate_cost(handle: String, hard_cap_usd: String) -> Result<CostEstimate, AppError> {
+async fn estimate_cost(
+    state: State<'_, AppState>,
+    handle: String,
+    hard_cap_usd: String,
+) -> Result<CostEstimate, AppError> {
     let cap = parse_usd_to_micros(&hard_cap_usd)?;
-    let provider = TwitterApiIo::new(security::load_api_key()?)?;
+    let provider = TwitterApiIo::new(state.db.load_api_key()?)?;
     provider.estimate(&normalise_handle(&handle)?, cap).await
 }
 
@@ -44,7 +47,7 @@ async fn start_scan(
     hard_cap_usd: String,
 ) -> Result<(), AppError> {
     let cap = parse_usd_to_micros(&hard_cap_usd)?;
-    let provider = TwitterApiIo::new(security::load_api_key()?)?;
+    let provider = TwitterApiIo::new(state.db.load_api_key()?)?;
     let db = state.db.clone();
     provider
         .scan(&db, &normalise_handle(&handle)?, cap, false)
@@ -62,7 +65,7 @@ async fn resume_scan_once(
         return Err(AppError::Validation("必须明确确认一次保守重试".into()));
     }
     let cap = parse_usd_to_micros(&hard_cap_usd)?;
-    let provider = TwitterApiIo::new(security::load_api_key()?)?;
+    let provider = TwitterApiIo::new(state.db.load_api_key()?)?;
     let db = state.db.clone();
     provider
         .scan(&db, &normalise_handle(&handle)?, cap, true)

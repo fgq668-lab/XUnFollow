@@ -6,8 +6,8 @@
 
 ## API Key
 
-- Key 仅通过 Rust 核心写入系统安全存储。
-- macOS 使用 Keychain，Windows 使用 Credential Manager（由 `keyring` 提供平台实现）。
+- Key 仅通过 Rust 核心写入当前电脑的 XUnFollow SQLite 数据库，且不会发送到 XUnFollow 的任何服务器。
+- 数据库所在目录在 macOS/Linux 上限制为当前用户可访问；Windows 使用应用数据目录的用户 ACL。
 - Key 不会放入 SQLite、JSON 导出、浏览器 `localStorage`、日志、崩溃报告或 UI state。
 - 前端只把用户刚输入的 Key 传递给原生命令；后续 Provider 请求由 Rust 发出，前端不会读回 Key。
 

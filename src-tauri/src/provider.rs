@@ -864,7 +864,7 @@ mod tests {
         provider.scan(&db, "fixture", 100_000, false).await.unwrap();
         server.join().unwrap();
 
-        let snapshot = db.bootstrap(false).unwrap();
+        let snapshot = db.bootstrap().unwrap();
         assert_eq!(snapshot.account.unwrap().username, "fixture");
         assert_eq!(snapshot.summary.unwrap().non_followback_count, 2);
         assert_eq!(
