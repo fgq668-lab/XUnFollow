@@ -101,6 +101,7 @@ function App() {
   if (!state) return <main className="loading">正在打开本地数据库…</main>;
 
   const captured = state.summary?.capturedAt ? new Date(state.summary.capturedAt).toLocaleString("zh-CN") : "尚未同步";
+  const history = state.history ?? [];
 
   return (
     <main className="shell">
@@ -178,7 +179,7 @@ function App() {
       </section>
       <section className="history-panel">
         <div><p className="eyebrow">处理历史</p><h2>最近记录</h2></div>
-        {state.history.length ? <div className="history-list">{state.history.slice(0, 12).map((entry) => <article key={entry.stableXId}><div><strong>{entry.name || `@${entry.username}`}</strong><span>@{entry.username} · {entry.actionDay}</span></div><HistoryStatus status={entry.status} /></article>)}</div> : <p className="subtle">完成一次人工处理后，记录会只保存在这台电脑。</p>}
+        {history.length ? <div className="history-list">{history.slice(0, 12).map((entry) => <article key={entry.stableXId}><div><strong>{entry.name || `@${entry.username}`}</strong><span>@{entry.username} · {entry.actionDay}</span></div><HistoryStatus status={entry.status} /></article>)}</div> : <p className="subtle">完成一次人工处理后，记录会只保存在这台电脑。</p>}
       </section>
       {notice && <div className="toast" onAnimationEnd={() => setNotice("")}>{notice}</div>}
     </main>
