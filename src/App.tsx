@@ -3,7 +3,7 @@ import * as api from "./api";
 import type { Bootstrap, Candidate, DecisionStatus } from "./types";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.1.2";
+const APP_VERSION = "0.1.3";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",
@@ -123,6 +123,17 @@ function App() {
         </div>
         <div className="privacy-pill"><i />人工确认，不自动取关</div>
       </header>
+
+      <section className="support-panel" aria-label="支持 XUnFollow">
+        <div>
+          <p className="eyebrow">支持 XUnFollow</p>
+          <p>觉得这个本地小工具有用？欢迎在 X 上关注我们。</p>
+        </div>
+        <div className="support-links">
+          <a href="https://x.com/guoqingfeng6" onClick={(event) => { event.preventDefault(); void api.openExternalProfile("https://x.com/guoqingfeng6"); }}>关注 @guoqingfeng6 ↗</a>
+          <a href="https://x.com/NIAOBGE" onClick={(event) => { event.preventDefault(); void api.openExternalProfile("https://x.com/NIAOBGE"); }}>关注 @NIAOBGE ↗</a>
+        </div>
+      </section>
 
       <section className="stats" aria-label="处理统计">
         <Stat value={number.format(counts.pending)} label="待处理" />
