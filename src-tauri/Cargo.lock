@@ -5155,7 +5155,7 @@ dependencies = [
 
 [[package]]
 name = "xunfollow"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "chrono",
  "reqwest 0.12.28",

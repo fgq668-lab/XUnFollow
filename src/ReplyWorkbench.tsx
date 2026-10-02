@@ -19,6 +19,7 @@ export default function ReplyWorkbench({ ownUsername }: { ownUsername?: string }
   const twitterKey = useRef<HTMLInputElement>(null);
   const [keysChanged, setKeysChanged] = useState(false);
   const [raisedCap, setRaisedCap] = useState("");
+  const personaTouched = useRef(false);
 
   const refresh = async () => {
     try {
@@ -27,15 +28,26 @@ export default function ReplyWorkbench({ ownUsername }: { ownUsername?: string }
       if (next.article && !article) { setTopic(next.article.topic); setArticle(next.article.body); }
     } catch (error) { setNotice(message(error)); }
   };
-  useEffect(() => { void api.workbenchSnapshot().then((next) => { setSnapshot(next); setPersona(next.persona); if (next.article) { setTopic(next.article.topic); setArticle(next.article.body); } }).catch((error) => setNotice(message(error))); }, []);
+  useEffect(() => { void api.workbenchSnapshot().then((next) => { setSnapshot(next); if (!personaTouched.current) setPersona(next.persona); if (next.article) { setTopic(next.article.topic); setArticle(next.article.body); } }).catch((error) => setNotice(message(error))); }, []);
   useEffect(() => { if (!snapshot?.run || !["searching","generating"].includes(snapshot.run.phase)) return; const timer = window.setInterval(() => void refresh(), 1500); return () => window.clearInterval(timer); }, [snapshot?.run?.phase]);
 
-  const saveSettings = async (event: FormEvent) => {
-    event.preventDefault(); setBusy(true);
+  const saveSettings = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    // Native autofill/accessibility input can update an input's visible value
+    // without updating React's onChange state. Read the submitted DOM values.
+    const values = new FormData(event.currentTarget);
+    const field = (name: string) => String(values.get(name) ?? "");
+    const submittedPersona: ReplyPersona = {
+      identity: field("identity"), topics: field("topics"), voice: field("voice"),
+      language: field("language") as ReplyPersona["language"], avoid: field("avoid"),
+    };
+    const x = field("twitterKey").trim();
+    const ds = field("deepseekKey").trim();
+    personaTouched.current = true;
+    setPersona(submittedPersona);
+    setBusy(true);
     try {
-      await api.saveReplyPersona(persona);
-      const x = twitterKey.current?.value.trim();
-      const ds = deepseekKey.current?.value.trim();
+      await api.saveReplyPersona(submittedPersona);
       if (x) await api.saveApiKey(x);
       if (ds) await api.saveDeepseekKey(ds);
       if (twitterKey.current) twitterKey.current.value = "";
@@ -77,13 +89,13 @@ export default function ReplyWorkbench({ ownUsername }: { ownUsername?: string }
       <summary>人设与 API 设置 {snapshot?.persona.identity && snapshot.deepseekKeyConfigured ? "✓" : "· 首次使用先填写"}</summary>
       <form onSubmit={(event) => void saveSettings(event)}>
         <div className="wb-grid">
-          <label>我的身份<input value={persona.identity} onChange={(e) => setPersona({ ...persona, identity: e.target.value })} placeholder="例如：独立开发者，分享真实产品实践" required maxLength={1000} /></label>
-          <label>擅长领域<input value={persona.topics} onChange={(e) => setPersona({ ...persona, topics: e.target.value })} placeholder="AI 工具、编程、创业" maxLength={1000} /></label>
-          <label>表达风格<input value={persona.voice} onChange={(e) => setPersona({ ...persona, voice: e.target.value })} placeholder="真诚、具体、不夸张" maxLength={1000} /></label>
-          <label>输出语言<select value={persona.language} onChange={(e) => setPersona({ ...persona, language: e.target.value as ReplyPersona["language"] })}><option value="zh">中文</option><option value="en">英文</option><option value="auto">跟随原帖</option></select></label>
-          <label className="wb-wide">避免的说法<input value={persona.avoid} onChange={(e) => setPersona({ ...persona, avoid: e.target.value })} placeholder="例如：不要硬广，不要过度赞美" maxLength={1000} /></label>
-          <label>TwitterAPI.io Key<input ref={twitterKey} className="secret-input" type="text" autoComplete="off" spellCheck={false} onInput={() => setKeysChanged(true)} placeholder={snapshot?.twitterKeyConfigured ? "已保存；留空沿用" : "粘贴官方 API Key"} /></label>
-          <label>DeepSeek 官方 Key<input ref={deepseekKey} className="secret-input" type="text" autoComplete="off" spellCheck={false} onInput={() => setKeysChanged(true)} placeholder={snapshot?.deepseekKeyConfigured ? "已保存；留空沿用" : "粘贴 DeepSeek 官方 API Key"} /></label>
+          <label>我的身份<input name="identity" value={persona.identity} onInput={(e) => { const value = e.currentTarget.value; personaTouched.current = true; setPersona((current) => ({ ...current, identity: value })); }} placeholder="例如：独立开发者，分享真实产品实践" required maxLength={1000} /></label>
+          <label>擅长领域<input name="topics" value={persona.topics} onInput={(e) => { const value = e.currentTarget.value; personaTouched.current = true; setPersona((current) => ({ ...current, topics: value })); }} placeholder="AI 工具、编程、创业" maxLength={1000} /></label>
+          <label>表达风格<input name="voice" value={persona.voice} onInput={(e) => { const value = e.currentTarget.value; personaTouched.current = true; setPersona((current) => ({ ...current, voice: value })); }} placeholder="真诚、具体、不夸张" maxLength={1000} /></label>
+          <label>输出语言<select name="language" value={persona.language} onChange={(e) => { const value = e.currentTarget.value as ReplyPersona["language"]; personaTouched.current = true; setPersona((current) => ({ ...current, language: value })); }}><option value="zh">中文</option><option value="en">英文</option><option value="auto">跟随原帖</option></select></label>
+          <label className="wb-wide">避免的说法<input name="avoid" value={persona.avoid} onInput={(e) => { const value = e.currentTarget.value; personaTouched.current = true; setPersona((current) => ({ ...current, avoid: value })); }} placeholder="例如：不要硬广，不要过度赞美" maxLength={1000} /></label>
+          <label>TwitterAPI.io Key<input name="twitterKey" ref={twitterKey} className="secret-input" type="password" autoComplete="off" spellCheck={false} onInput={() => setKeysChanged(true)} placeholder={snapshot?.twitterKeyConfigured ? "已保存；留空沿用" : "粘贴官方 API Key"} /></label>
+          <label>DeepSeek 官方 Key<input name="deepseekKey" ref={deepseekKey} className="secret-input" type="password" autoComplete="off" spellCheck={false} onInput={() => setKeysChanged(true)} placeholder={snapshot?.deepseekKeyConfigured ? "已保存；留空沿用" : "粘贴 DeepSeek 官方 API Key"} /></label>
         </div>
         <p className="wb-note">Key 只保存在本机数据库，不在页面回显。生成草稿时，选中帖子的内容和你填写的人设会发送给 DeepSeek 官方 API。</p>
         <button className="open-x" type="submit" disabled={busy}>{keysChanged ? "保存 Key 和人设" : "保存人设与设置"}</button>

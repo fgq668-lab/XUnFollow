@@ -159,16 +159,21 @@ pub fn parse_cap(value: &str) -> Result<i64, AppError> {
 }
 
 fn validate_persona(persona: &Persona) -> Result<(), AppError> {
-    if persona.identity.trim().is_empty()
-        || persona.identity.len() > 1000
-        || persona.topics.len() > 1000
-        || persona.voice.len() > 1000
-        || persona.avoid.len() > 1000
-        || !matches!(persona.language.as_str(), "zh" | "en" | "auto")
-    {
-        return Err(AppError::Validation(
-            "请填写身份；每个人设字段不超过 1000 字符".into(),
-        ));
+    if persona.identity.trim().is_empty() {
+        return Err(AppError::Validation("请填写我的身份".into()));
+    }
+    for (name, value) in [
+        ("我的身份", &persona.identity),
+        ("擅长领域", &persona.topics),
+        ("表达风格", &persona.voice),
+        ("避免的说法", &persona.avoid),
+    ] {
+        if value.chars().count() > 1000 {
+            return Err(AppError::Validation(format!("{name}不能超过 1000 个字符")));
+        }
+    }
+    if !matches!(persona.language.as_str(), "zh" | "en" | "auto") {
+        return Err(AppError::Validation("输出语言无效".into()));
     }
     Ok(())
 }
@@ -932,6 +937,141 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
     static TEST_ID: AtomicU64 = AtomicU64::new(0);
+
+    // Opt-in live smoke test. The credential is supplied only through the process
+    // environment and the temporary database is removed even if an assertion fails.
+    #[tokio::test]
+    #[ignore = "requires XUNFOLLOW_TEST_DEEPSEEK_KEY and makes two small paid requests"]
+    async fn live_deepseek_reply_and_article_in_isolated_database() {
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let key = std::env::var("XUNFOLLOW_TEST_DEEPSEEK_KEY")
+            .expect("set XUNFOLLOW_TEST_DEEPSEEK_KEY for this opt-in test");
+        let dir = std::env::temp_dir().join(format!(
+            "xunfollow-live-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&dir).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let _cleanup = Cleanup(dir.clone());
+        let db = AppDb::new(dir.join("test.sqlite3")).unwrap();
+        db.save_api_key("not-used-in-this-test").unwrap();
+        db.save_deepseek_key(&key).unwrap();
+        db.save_persona(&Persona {
+            identity: "独立开发者".into(),
+            topics: "AI 产品与软件开发".into(),
+            voice: "友善、具体，不要空话".into(),
+            language: "zh".into(),
+            avoid: "夸大承诺".into(),
+        })
+        .unwrap();
+        let mut cfg = config();
+        cfg.target_count = 1;
+        cfg.ai_cap_usd = "0.003".into();
+        let id = db.create_reply_run(&cfg).unwrap();
+        db.add_search_page(
+            id,
+            &[SearchPost {
+                id: "1234567890123456789".into(),
+                username: "test_author".into(),
+                text: "AI 工具真正有用的时候，是让普通人把具体的事情做完。你觉得最重要的设计原则是什么？".into(),
+                url: "https://x.com/test_author/status/1234567890123456789".into(),
+                created_at: Utc::now().to_rfc3339(),
+                score: 0.9,
+                reason: "isolated test fixture".into(),
+            }],
+            "",
+        )
+        .unwrap();
+        db.select_best(id, 1).unwrap();
+        db.set_phase(id, "generating", None).unwrap();
+        run_reply_batch(&db, id, &AtomicBool::new(true))
+            .await
+            .unwrap();
+        let snapshot = db.workbench_snapshot(false).unwrap();
+        let run = snapshot.run.unwrap();
+        assert_eq!(run.phase, "done", "reply run failed: {:?}", run.error);
+        assert_eq!(run.selected_count, 1);
+        assert_eq!(run.drafted_count, 1);
+        assert_eq!(snapshot.posts.len(), 1);
+        assert!(!snapshot.posts[0].draft.trim().is_empty());
+        assert!(run.ai_spent_usd.parse::<f64>().unwrap() <= 0.003);
+        db.update_reply_post(&snapshot.posts[0].post_id, None, Some("replied"))
+            .unwrap();
+        assert_eq!(db.workbench_snapshot(false).unwrap().today_replied_count, 1);
+
+        let body = generate_article(&db, "AI 工具怎样帮助个人开发者", "0.003")
+            .await
+            .unwrap();
+        assert!(!body.trim().is_empty());
+        let article = db.workbench_snapshot(false).unwrap().article.unwrap();
+        assert_eq!(article.topic, "AI 工具怎样帮助个人开发者");
+        assert!(article.cost_usd.parse::<f64>().unwrap() <= 0.003);
+        println!(
+            "live smoke passed: reply cost ${}, article cost ${}",
+            run.ai_spent_usd, article.cost_usd
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires XUNFOLLOW_TEST_TWITTER_DB and makes one small paid search request"]
+    async fn live_twitter_search_reads_existing_key_without_writing_user_database() {
+        let path = std::env::var("XUNFOLLOW_TEST_TWITTER_DB")
+            .expect("set XUNFOLLOW_TEST_TWITTER_DB for this opt-in test");
+        let mut uri = url::Url::from_file_path(path).unwrap();
+        uri.query_pairs_mut()
+            .append_pair("mode", "ro")
+            .append_pair("immutable", "1");
+        let connection = rusqlite::Connection::open_with_flags(
+            uri.as_str(),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+        )
+        .unwrap();
+        let key: String = connection
+            .query_row(
+                "SELECT value FROM settings WHERE key='provider_api_key'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!key.is_empty());
+        let mut cfg = config();
+        cfg.lookback_hours = 72;
+        cfg.own_username =
+            std::env::var("XUNFOLLOW_TEST_OWN_USERNAME").unwrap_or_else(|_| "me".into());
+        let query = query_for(&cfg).unwrap();
+        let client = Client::builder()
+            .https_only(true)
+            .timeout(std::time::Duration::from_secs(45))
+            .build()
+            .unwrap();
+        let page = search_page(&client, &key, &query, "Latest", "")
+            .await
+            .unwrap();
+        let eligible = page
+            .tweets
+            .iter()
+            .filter_map(|tweet| extract_post(tweet, &cfg))
+            .count();
+        println!(
+            "live search passed: returned {} posts; {} eligible after local filters",
+            page.tweets.len(),
+            eligible
+        );
+    }
     fn fixture() -> (AppDb, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!(
             "xunfollow-workbench-{}-{}",
@@ -951,6 +1091,42 @@ mod tests {
             ai_cap_usd: "0.01".into(),
             own_username: "me".into(),
         }
+    }
+
+    #[test]
+    fn saves_visible_chinese_persona_and_reports_the_actual_invalid_field() {
+        let (db, dir) = fixture();
+        let persona: Persona = serde_json::from_value(json!({
+            "identity": "开发者",
+            "topics": "创业",
+            "voice": "",
+            "language": "zh",
+            "avoid": "不要色情"
+        }))
+        .unwrap();
+        db.save_persona(&persona).unwrap();
+        let saved = db.workbench_snapshot(false).unwrap().persona;
+        assert_eq!(saved.identity, "开发者");
+        assert_eq!(saved.topics, "创业");
+        assert_eq!(saved.avoid, "不要色情");
+
+        let mut invalid = persona.clone();
+        invalid.identity = "  ".into();
+        assert!(db
+            .save_persona(&invalid)
+            .unwrap_err()
+            .to_string()
+            .contains("我的身份"));
+        invalid = persona;
+        invalid.topics = "中".repeat(1001);
+        assert!(db
+            .save_persona(&invalid)
+            .unwrap_err()
+            .to_string()
+            .contains("擅长领域"));
+        invalid.topics = "中".repeat(500);
+        db.save_persona(&invalid).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn query_rejects_operator_injection_and_caps_range() {

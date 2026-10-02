@@ -8,6 +8,8 @@ XUnFollow 帮你找出“你关注、但对方没有关注你”的账号，并�
 
 新增的「X 回复工作台」可按关键词、时间、语言和目标数量寻找近期帖子，按相关度、时效与互动量推荐，并使用用户自己的 DeepSeek 官方 API Key 批量生成可编辑回复草稿。所有发布仍由用户在 X 上手动完成。
 
+v0.2.2 修复了 macOS 桌面端人设输入框显示有内容、保存时却提示“请填写身份”的问题；API Key 输入框也改为系统密码输入框。
+
 ## 界面预览
 
 ![XUnFollow：同步进度与可边同步边处理的本地名单](docs/images/xunfollow-progress.png)
@@ -71,7 +73,7 @@ XUnFollow 帮你找出“你关注、但对方没有关注你”的账号，并�
 
 ## 下载与系统选择
 
-每次推送形如 `v0.2.1` 的版本标签时，GitHub Actions 会自动创建一个 [Release](https://github.com/fgq668-lab/XUnFollow/releases)，并附上以下安装包：
+每次推送形如 `v0.2.2` 的版本标签时，GitHub Actions 会自动创建一个 [Release](https://github.com/fgq668-lab/XUnFollow/releases)，并附上以下安装包：
 
 | 你的电脑 | 下载哪个文件 |
 | --- | --- |
@@ -127,7 +129,7 @@ pnpm tauri build --bundles nsis
 
 Provider 的价格、限制和条款会变化。XUnFollow 按当前公开价格显示本地估计；每页按返回的项目数、每次生成按返回的 token 用量记账，并在下一次请求前检查上限。此上限是应用侧保护，不是 Provider 账户的官方消费限额。
 
-仓库内的 Rust 测试使用脱敏模拟 Provider 数据，覆盖集合计算、分页费用、检查点、费用不确定路径和本地进度导入；测试不访问真实 X 账号或 Provider。
+默认 Rust 测试使用脱敏模拟 Provider 数据，覆盖集合计算、分页费用、检查点、费用不确定路径和本地进度导入；默认不会访问真实 X 账号或 Provider。另有两项需手动启用的真实接口冒烟测试，使用临时数据库并可能产生少量费用，不在 CI 中运行。
 
 ## 安全模型
 
