@@ -2,6 +2,7 @@ mod db;
 mod error;
 mod models;
 mod provider;
+mod workbench;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -16,11 +17,122 @@ use std::collections::BTreeMap;
 use tauri::{Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
+use workbench::{Persona, ReplyConfig, WorkbenchSnapshot};
 
 #[derive(Clone)]
 struct AppState {
     db: Arc<AppDb>,
     sync_running: Arc<AtomicBool>,
+    reply_running: Arc<AtomicBool>,
+}
+
+#[tauri::command]
+fn workbench_snapshot(state: State<'_, AppState>) -> Result<WorkbenchSnapshot, AppError> {
+    state
+        .db
+        .workbench_snapshot(state.reply_running.load(Ordering::Acquire))
+}
+
+#[tauri::command]
+fn save_reply_persona(state: State<'_, AppState>, persona: Persona) -> Result<(), AppError> {
+    state.db.save_persona(&persona)
+}
+
+#[tauri::command]
+fn save_deepseek_key(state: State<'_, AppState>, api_key: String) -> Result<(), AppError> {
+    state.db.save_deepseek_key(&api_key)
+}
+
+fn launch_reply_worker(state: &AppState, id: i64) -> Result<(), AppError> {
+    if state.reply_running.swap(true, Ordering::AcqRel) {
+        return Err(AppError::Validation("回复任务已经在运行".into()));
+    }
+    let db = state.db.clone();
+    let running = state.reply_running.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = workbench::run_reply_batch(&db, id, &running).await {
+            let _ = db.set_phase(id, "paused", Some(&error.to_string()));
+        }
+        running.store(false, Ordering::Release);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn start_reply_run(state: State<'_, AppState>, config: ReplyConfig) -> Result<(), AppError> {
+    if state.reply_running.load(Ordering::Acquire) {
+        return Err(AppError::Validation("回复任务已经在运行".into()));
+    }
+    let id = state.db.create_reply_run(&config)?;
+    launch_reply_worker(&state, id)
+}
+
+#[tauri::command]
+fn resume_reply_run(
+    state: State<'_, AppState>,
+    acknowledge_uncertain_cost: bool,
+) -> Result<(), AppError> {
+    if !acknowledge_uncertain_cost {
+        return Err(AppError::Validation("请确认可能发生的重复计费".into()));
+    }
+    if state.reply_running.load(Ordering::Acquire) {
+        return Err(AppError::Validation("回复任务已经在运行".into()));
+    }
+    let id = state.db.resume_reply_run()?;
+    launch_reply_worker(&state, id)
+}
+
+#[tauri::command]
+fn stop_reply_run(state: State<'_, AppState>) {
+    state.reply_running.store(false, Ordering::Release);
+}
+
+#[tauri::command]
+fn update_reply_post(
+    state: State<'_, AppState>,
+    post_id: String,
+    draft: Option<String>,
+    status: Option<String>,
+) -> Result<(), AppError> {
+    state
+        .db
+        .update_reply_post(&post_id, draft.as_deref(), status.as_deref())
+}
+
+#[tauri::command]
+fn regenerate_reply_post(state: State<'_, AppState>, post_id: String) -> Result<(), AppError> {
+    let id = state.db.queue_regeneration(&post_id)?;
+    if !state.reply_running.load(Ordering::Acquire) {
+        launch_reply_worker(&state, id)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn increase_reply_ai_cap(state: State<'_, AppState>, new_cap_usd: String) -> Result<(), AppError> {
+    if state.reply_running.load(Ordering::Acquire) {
+        return Err(AppError::Validation("请先暂停当前任务".into()));
+    }
+    let id = state.db.increase_reply_ai_cap(&new_cap_usd)?;
+    launch_reply_worker(&state, id)
+}
+
+#[tauri::command]
+async fn create_article_draft(
+    state: State<'_, AppState>,
+    topic: String,
+    ai_cap_usd: String,
+) -> Result<String, AppError> {
+    workbench::generate_article(&state.db, &topic, &ai_cap_usd).await
+}
+
+#[tauri::command]
+fn save_article_draft(
+    state: State<'_, AppState>,
+    topic: String,
+    body: String,
+) -> Result<(), AppError> {
+    state.db.save_article(&topic, &body)
 }
 
 #[tauri::command]
@@ -193,6 +305,7 @@ pub fn run() {
             app.manage(AppState {
                 db: Arc::new(AppDb::new(path)?),
                 sync_running: Arc::new(AtomicBool::new(false)),
+                reply_running: Arc::new(AtomicBool::new(false)),
             });
             Ok(())
         })
@@ -207,6 +320,17 @@ pub fn run() {
             continue_batch,
             import_decisions,
             open_external_profile,
+            workbench_snapshot,
+            save_reply_persona,
+            save_deepseek_key,
+            start_reply_run,
+            resume_reply_run,
+            stop_reply_run,
+            update_reply_post,
+            regenerate_reply_post,
+            increase_reply_ai_cap,
+            create_article_draft,
+            save_article_draft,
         ])
         .run(tauri::generate_context!())
         .expect("error while running XUnFollow");

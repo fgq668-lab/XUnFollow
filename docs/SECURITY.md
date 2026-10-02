@@ -8,12 +8,12 @@
 
 - Key 仅通过 Rust 核心写入当前电脑的 XUnFollow SQLite 数据库，且不会发送到 XUnFollow 的任何服务器。
 - 数据库所在目录在 macOS/Linux 上限制为当前用户可访问；Windows 使用应用数据目录的用户 ACL。
-- Key 不会放入 SQLite、JSON 导出、浏览器 `localStorage`、日志、崩溃报告或 UI state。
+- Key 保存在本机 SQLite `settings` 表中，不会放入 JSON 导出、浏览器 `localStorage`、日志或崩溃报告；数据库未额外加密。
 - 前端只把用户刚输入的 Key 传递给原生命令；后续 Provider 请求由 Rust 发出，前端不会读回 Key。
 
 ## 网络
 
-- Provider 请求固定为 HTTPS `api.twitterapi.io`；不允许用户输入任意 Provider 基础 URL。
+- Provider 请求固定为 HTTPS `api.twitterapi.io` 与 `api.deepseek.com`；不允许用户输入任意 Provider 基础 URL。DeepSeek 请求只发送选中帖子的内容、人设或文章主题，不发送 Key 给其他域名。
 - 外部资料页固定允许 `x.com` / `www.x.com` 的 HTTPS URL。
 - CSP 限制网络连接和头像图片来源。
 - 不要实现代理转发 API Key 的“便利服务器”。那会破坏 BYOK 和隐私承诺。
@@ -28,7 +28,7 @@
 
 ## 社交账号操作
 
-应用只读取公开关系数据并在用户点击时打开资料页。不得加入 X 密码、Cookie、浏览器注入、自动点击、自动 unfollow 或批量写操作。
+应用只读取公开关系与帖子数据，在用户点击时打开 X 页面。回复文本仅作为草稿生成；不得加入 X 密码、Cookie、浏览器注入、自动点击、自动 unfollow、自动回复或批量写操作。
 
 ## 报告漏洞
 

@@ -84,7 +84,7 @@ jobs:
             - **Intel Mac**：下载 `x86_64-apple-darwin` 的 DMG。
             - **Windows 10/11 x64**：下载 `.exe` 安装包。
 
-            这是本地优先应用：名单、处理进度和 API Key 只保存在用户电脑。应用不会自动取关；请在外部 X 页面自行确认操作。
+            这是本地优先应用：名单、回复草稿、处理进度和 API Key 只保存在用户电脑。X 回复工作台可按关键词搜索并用自己的 DeepSeek 官方 Key 生成草稿；生成时选中帖子与人设会发送到 DeepSeek 官方 API。应用不会自动取关或发帖；请在外部 X 页面自行确认操作。
 
             当前安装包尚未使用 Apple Developer ID 或 Windows 代码签名证书。系统首次打开可能显示未知开发者提示；请仅从本 Release 下载，并在确认仓库来源后继续安装。
           files: release-assets/*

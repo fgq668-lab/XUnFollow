@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Bootstrap, Candidate, CostEstimate, DecisionStatus, HistoryEntry } from "./types";
+import type { Bootstrap, Candidate, CostEstimate, DecisionStatus, HistoryEntry, ReplyConfig, ReplyPersona, WorkbenchSnapshot } from "./types";
 
 const native = "__TAURI_INTERNALS__" in window;
 
@@ -62,7 +62,7 @@ export async function bootstrap(): Promise<Bootstrap> {
 }
 
 export async function saveApiKey(apiKey: string): Promise<void> {
-  if (!native) return;
+  if (!native) { demoWorkbench.twitterKeyConfigured = Boolean(apiKey.trim()); return; }
   await invoke("save_api_key", { apiKey });
 }
 
@@ -131,4 +131,69 @@ export async function openExternalProfile(url: string): Promise<void> {
     return;
   }
   await invoke("open_external_profile", { url });
+}
+
+let demoWorkbench: WorkbenchSnapshot = {
+  persona: { identity: "", topics: "", voice: "", language: "zh", avoid: "" },
+  twitterKeyConfigured: false, deepseekKeyConfigured: false, posts: [], running: false, todayRepliedCount: 0,
+};
+
+export async function workbenchSnapshot(): Promise<WorkbenchSnapshot> {
+  return native ? invoke<WorkbenchSnapshot>("workbench_snapshot") : structuredClone(demoWorkbench);
+}
+
+export async function saveReplyPersona(persona: ReplyPersona): Promise<void> {
+  if (native) await invoke("save_reply_persona", { persona });
+  else demoWorkbench.persona = persona;
+}
+
+export async function saveDeepseekKey(apiKey: string): Promise<void> {
+  if (native) await invoke("save_deepseek_key", { apiKey });
+  else demoWorkbench.deepseekKeyConfigured = Boolean(apiKey.trim());
+}
+
+export async function startReplyRun(config: ReplyConfig): Promise<void> {
+  if (native) await invoke("start_reply_run", { config });
+  else {
+    demoWorkbench.run = { id: 1, day: localDay(), phase: "done", targetCount: config.targetCount, maxPages: 1, pagesDone: 1,
+      xCapUsd: config.xCapUsd, aiCapUsd: config.aiCapUsd, xSpentUsd: "0.000000", aiSpentUsd: "0.000000", xUncertainUsd: "0.000000", aiUncertainUsd: "0.000000", aiReservedUsd: "0.000000", xEstimatedUsd: (Math.min(30, Math.max(1, Math.ceil(config.targetCount * 3 / 20))) * 0.003).toFixed(6), aiEstimatedUsd: "0.000000",
+      candidateCount: 0, selectedCount: 0, draftedCount: 0, repliedCount: 0, needsExplicitRetry: false };
+  }
+}
+
+export async function resumeReplyRun(): Promise<void> {
+  if (native) await invoke("resume_reply_run", { acknowledgeUncertainCost: true });
+}
+
+export async function stopReplyRun(): Promise<void> {
+  if (native) await invoke("stop_reply_run");
+  else demoWorkbench.running = false;
+}
+
+export async function updateReplyPost(postId: string, draft?: string, status?: string): Promise<void> {
+  if (native) await invoke("update_reply_post", { postId, draft: draft ?? null, status: status ?? null });
+  else {
+    const post = demoWorkbench.posts.find((item) => item.postId === postId);
+    if (post) { if (draft !== undefined) post.draft = draft; if (status) post.status = status as typeof post.status; }
+  }
+}
+
+export async function regenerateReplyPost(postId: string): Promise<void> {
+  if (native) await invoke("regenerate_reply_post", { postId });
+}
+
+export async function increaseReplyAiCap(newCapUsd: string): Promise<void> {
+  if (native) await invoke("increase_reply_ai_cap", { newCapUsd });
+}
+
+export async function createArticleDraft(topic: string, aiCapUsd: string): Promise<string> {
+  if (native) return invoke<string>("create_article_draft", { topic, aiCapUsd });
+  const body = `关于${topic}：在这里编辑你的文章草稿。`;
+  demoWorkbench.article = { id: 1, topic, body, costUsd: "0.000000", capUsd: aiCapUsd };
+  return body;
+}
+
+export async function saveArticleDraft(topic: string, body: string): Promise<void> {
+  if (native) await invoke("save_article_draft", { topic, body });
+  else demoWorkbench.article = { id: 1, topic, body, costUsd: demoWorkbench.article?.costUsd ?? "0.000000", capUsd: demoWorkbench.article?.capUsd ?? "0.000000" };
 }

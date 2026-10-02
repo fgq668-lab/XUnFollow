@@ -1,9 +1,10 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "./api";
 import type { Bootstrap, Candidate, DecisionStatus } from "./types";
+import ReplyWorkbench from "./ReplyWorkbench";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.1.6";
+const APP_VERSION = "0.2.0";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",
@@ -31,6 +32,7 @@ function decisionOf(state: Bootstrap, candidate: Candidate): DecisionStatus {
 function App() {
   const [state, setState] = useState<Bootstrap | null>(null);
   const [tab, setTab] = useState<Tab>("pending");
+  const [view, setView] = useState<"unfollow" | "replies">("unfollow");
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -140,6 +142,10 @@ function App() {
         </div>
       </section>
 
+      <nav className="main-nav" aria-label="功能选择"><button className={view === "unfollow" ? "active" : ""} onClick={() => setView("unfollow")}>取关管理</button><button className={view === "replies" ? "active" : ""} onClick={() => setView("replies")}>X 回复工作台</button></nav>
+
+      {view === "replies" ? <ReplyWorkbench ownUsername={state.account?.username} /> : <>
+
       <section className="stats" aria-label="处理统计">
         <Stat value={number.format(counts.pending)} label="待处理" />
         <Stat value={number.format(counts.unfollowed)} label="已取关" />
@@ -209,6 +215,7 @@ function App() {
         <div><p className="eyebrow">处理历史</p><h2>最近记录</h2></div>
         {history.length ? <div className="history-list">{history.slice(0, 12).map((entry) => <article key={entry.stableXId}><div><strong>{entry.name || `@${entry.username}`}</strong><span>@{entry.username} · {entry.actionDay}</span></div><HistoryStatus status={entry.status} /></article>)}</div> : <p className="subtle">完成一次人工处理后，记录会只保存在这台电脑。</p>}
       </section>
+      </>}
       {notice && <div className="toast" onAnimationEnd={() => setNotice("")}>{notice}</div>}
     </main>
   );

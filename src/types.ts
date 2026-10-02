@@ -65,3 +65,69 @@ export interface CostEstimate {
   hardCapUsd: string;
   assumption: string;
 }
+
+export interface ReplyPersona {
+  identity: string;
+  topics: string;
+  voice: string;
+  language: "zh" | "en" | "auto";
+  avoid: string;
+}
+
+export interface ReplyConfig {
+  keywords: string[];
+  targetCount: number;
+  language: "zh" | "en" | "all";
+  lookbackHours: number;
+  sortMode: "latest" | "hot" | "recommended";
+  xCapUsd: string;
+  aiCapUsd: string;
+  ownUsername: string;
+}
+
+export interface ReplyRun {
+  id: number;
+  day: string;
+  phase: "searching" | "generating" | "paused" | "done";
+  targetCount: number;
+  maxPages: number;
+  pagesDone: number;
+  xCapUsd: string;
+  aiCapUsd: string;
+  xSpentUsd: string;
+  aiSpentUsd: string;
+  xUncertainUsd: string;
+  aiUncertainUsd: string;
+  aiReservedUsd: string;
+  xEstimatedUsd: string;
+  aiEstimatedUsd: string;
+  candidateCount: number;
+  selectedCount: number;
+  draftedCount: number;
+  repliedCount: number;
+  error?: string;
+  needsExplicitRetry: boolean;
+}
+
+export interface ReplyPost {
+  postId: string;
+  username: string;
+  postText: string;
+  postUrl: string;
+  createdAt: string;
+  reason: string;
+  draft: string;
+  status: "pending" | "copied" | "replied" | "skipped";
+  generationError?: string;
+}
+
+export interface WorkbenchSnapshot {
+  persona: ReplyPersona;
+  twitterKeyConfigured: boolean;
+  deepseekKeyConfigured: boolean;
+  run?: ReplyRun;
+  posts: ReplyPost[];
+  article?: { id: number; topic: string; body: string; costUsd: string; capUsd: string };
+  running: boolean;
+  todayRepliedCount: number;
+}

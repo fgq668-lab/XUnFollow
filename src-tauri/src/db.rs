@@ -58,6 +58,68 @@ impl AppDb {
                     state_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS reply_persona (
+                    id INTEGER PRIMARY KEY CHECK(id = 1),
+                    identity_text TEXT NOT NULL DEFAULT '',
+                    topics TEXT NOT NULL DEFAULT '',
+                    voice TEXT NOT NULL DEFAULT '',
+                    language TEXT NOT NULL DEFAULT 'zh',
+                    avoid_text TEXT NOT NULL DEFAULT ''
+                 );
+                 CREATE TABLE IF NOT EXISTS reply_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    day TEXT NOT NULL,
+                    phase TEXT NOT NULL,
+                    query_text TEXT NOT NULL,
+                    query_type TEXT NOT NULL,
+                    target_count INTEGER NOT NULL,
+                    max_pages INTEGER NOT NULL,
+                    pages_done INTEGER NOT NULL DEFAULT 0,
+                    cursor TEXT NOT NULL DEFAULT '',
+                    x_cap_micros INTEGER NOT NULL,
+                    ai_cap_micros INTEGER NOT NULL,
+                    x_spent_micros INTEGER NOT NULL DEFAULT 0,
+                    ai_spent_micros INTEGER NOT NULL DEFAULT 0,
+                    ai_reserved_micros INTEGER NOT NULL DEFAULT 0,
+                    x_uncertain_micros INTEGER NOT NULL DEFAULT 0,
+                    ai_uncertain_micros INTEGER NOT NULL DEFAULT 0,
+                    in_flight TEXT,
+                    error_text TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS reply_posts (
+                    post_id TEXT PRIMARY KEY,
+                    run_id INTEGER NOT NULL,
+                    day TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    post_text TEXT NOT NULL,
+                    post_url TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    score REAL NOT NULL,
+                    reason TEXT NOT NULL,
+                    selected INTEGER NOT NULL DEFAULT 0,
+                    draft TEXT NOT NULL DEFAULT '',
+                    retry_requested INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','copied','replied','skipped')),
+                    generation_error TEXT,
+                    updated_at TEXT NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS reply_posts_run_idx ON reply_posts(run_id, score DESC);
+                 CREATE TABLE IF NOT EXISTS reply_generation_requests (
+                    post_id TEXT PRIMARY KEY,
+                    run_id INTEGER NOT NULL,
+                    reservation_micros INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS article_drafts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    topic TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    cost_micros INTEGER NOT NULL DEFAULT 0,
+                    cap_micros INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                 );
                  INSERT OR IGNORE INTO settings(key, value) VALUES ('daily_goal', '10');"
             )?;
             Ok(())
@@ -314,7 +376,7 @@ impl AppDb {
         })
     }
 
-    fn with_connection<T>(
+    pub(crate) fn with_connection<T>(
         &self,
         operation: impl FnOnce(&mut Connection) -> Result<T, AppError>,
     ) -> Result<T, AppError> {
