@@ -120,6 +120,9 @@ h2 { margin: 0; font-size: 28px; }
 .wb-actions .next-batch, .wb-actions .open-x { margin: 0; border-color: #171717; background: #171717; color: #fff; }
 .wb-progress-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .workbench-progress .progress-track { margin: 18px 0 12px; }
+.wb-stages { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.wb-stages span { padding: 7px 9px; border-radius: 999px; background: #f0ede7; color: #898078; font-size: 12px; }
+.wb-stages span.active { background: #e3f3e9; color: #157255; }
 .workbench-progress p { color: #6e6860; margin-bottom: 0; }
 .wb-error { color: #a6311c !important; }
 .wb-cap-raise { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 14px; }

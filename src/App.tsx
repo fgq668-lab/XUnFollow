@@ -4,7 +4,7 @@ import type { Bootstrap, Candidate, DecisionStatus } from "./types";
 import ReplyWorkbench from "./ReplyWorkbench";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.2.0";
+const APP_VERSION = "0.2.1";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",
@@ -122,13 +122,13 @@ function App() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">LOCAL-FIRST · 你的数据只在本机</p>
+          <p className="eyebrow">LOCAL-FIRST · 草稿与进度保存在本机</p>
           <h1>XUnFollow</h1>
           <p className="subtle">
             {state.account ? `@${state.account.username} · 名单同步于 ${captured}` : "尚未连接 X 账号"}
           </p>
         </div>
-        <div className="privacy-pill"><i />人工确认，不自动取关</div>
+        <div className="privacy-pill"><i />{view === "unfollow" ? "人工确认，不自动取关" : "人工确认，不自动发布"}</div>
       </header>
 
       <section className="support-panel" aria-label="支持 XUnFollow">

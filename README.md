@@ -71,7 +71,7 @@ XUnFollow 帮你找出“你关注、但对方没有关注你”的账号，并�
 
 ## 下载与系统选择
 
-每次推送形如 `v0.2.0` 的版本标签时，GitHub Actions 会自动创建一个 [Release](https://github.com/fgq668-lab/XUnFollow/releases)，并附上以下安装包：
+每次推送形如 `v0.2.1` 的版本标签时，GitHub Actions 会自动创建一个 [Release](https://github.com/fgq668-lab/XUnFollow/releases)，并附上以下安装包：
 
 | 你的电脑 | 下载哪个文件 |
 | --- | --- |
