@@ -721,6 +721,11 @@ async fn deepseek_request(
         .await
         .map_err(|e| AppError::Network(e.to_string()))?;
     if !status.is_success() {
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(AppError::Provider(
+                "DeepSeek HTTP 401：官方 API Key 验证失败，请在人设与 API 设置中保存有效的 DeepSeek Key 后重试".into(),
+            ));
+        }
         return Err(safe_provider_error(status, &body, key));
     }
     let value: Value = serde_json::from_str(&body)

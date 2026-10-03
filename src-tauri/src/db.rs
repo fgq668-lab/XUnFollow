@@ -122,6 +122,18 @@ impl AppDb {
                  );
                  INSERT OR IGNORE INTO settings(key, value) VALUES ('daily_goal', '10');"
             )?;
+            // CREATE TABLE IF NOT EXISTS leaves the schema of existing installs
+            // unchanged. Upgrade older reply workbench databases in place.
+            let has_retry_requested: bool = connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('reply_posts') WHERE name='retry_requested')",
+                [],
+                |row| row.get(0),
+            )?;
+            if !has_retry_requested {
+                connection.execute_batch(
+                    "ALTER TABLE reply_posts ADD COLUMN retry_requested INTEGER NOT NULL DEFAULT 0;",
+                )?;
+            }
             Ok(())
         })?;
         Ok(db)
@@ -605,6 +617,47 @@ mod tests {
         db.save_api_key("test-local-api-key").unwrap();
         assert_eq!(db.load_api_key().unwrap(), "test-local-api-key");
         assert!(db.bootstrap().unwrap().api_key_configured);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn upgrades_legacy_workbench_without_losing_drafts_or_decisions() {
+        let (db, directory) = fixture_db(1);
+        db.record_decision("200000000000000000", "unfollowed")
+            .unwrap();
+        db.with_connection(|connection| {
+            connection.execute_batch(
+                "INSERT INTO reply_posts(post_id,run_id,day,username,post_text,post_url,created_at,score,reason,draft,updated_at)
+                 VALUES ('legacy-post',1,'2026-10-03','author','原帖','https://x.com/author/status/1','now',1.0,'test','已保存的草稿','now');
+                 ALTER TABLE reply_posts DROP COLUMN retry_requested;",
+            )?;
+            Ok(())
+        }).unwrap();
+        let upgraded = AppDb::new(directory.join("test.sqlite3")).unwrap();
+        // Reopening again must remain safe after the migration has been applied.
+        let upgraded = AppDb::new(upgraded.path.clone()).unwrap();
+        upgraded
+            .with_connection(|connection| {
+                let (draft, retry): (String, i64) = connection.query_row(
+                    "SELECT draft,retry_requested FROM reply_posts WHERE post_id='legacy-post'",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?;
+                assert_eq!(draft, "已保存的草稿");
+                assert_eq!(retry, 0);
+                connection.execute(
+                    "UPDATE reply_posts SET retry_requested=1 WHERE post_id='legacy-post'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = upgraded.bootstrap().unwrap();
+        assert_eq!(snapshot.candidates.len(), 1);
+        assert_eq!(
+            snapshot.decisions["200000000000000000"].status,
+            DecisionStatus::Unfollowed
+        );
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
