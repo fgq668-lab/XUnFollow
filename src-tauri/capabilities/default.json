@@ -3,6 +3,5 @@
   "identifier": "main-capability",
   "description": "Main application window capabilities",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": ["core:default", "opener:default", "notification:default"]
 }
-

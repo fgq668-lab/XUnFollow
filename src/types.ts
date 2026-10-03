@@ -83,7 +83,34 @@ export interface ReplyConfig {
   xCapUsd: string;
   aiCapUsd: string;
   ownUsername: string;
+  scope: "mutual" | "keywords";
 }
+export interface WorkbenchPreferences {
+  replyPrompt: string;
+  catchphrases: string;
+  model: "deepseek-flash" | "deepseek-v4-pro";
+  dailyTarget: number;
+  ownUsername: string;
+  defaultXCapUsd: string;
+  defaultAiCapUsd: string;
+  openBatchSize: number;
+  creatorPrompt: string;
+  creatorVoiceSamples: string;
+  creatorDailyTarget: number;
+  creatorDayStart: string;
+  creatorDayEnd: string;
+  remindersEnabled: boolean;
+  reminderSound: boolean;
+}
+
+export interface CreatorConfig { topic: string; materials: string; count: number; hot: boolean; keywords: string[]; kinds: string[]; minLikes: number; xCapUsd: string; aiCapUsd: string; screenshot?: boolean; originUrl?: string; dailyTarget?: number; topics?: string[]; rewriteTarget?: number; referenceHandles?: string[]; }
+export interface ReferencePost { id:string; text:string; url:string; createdAt:string; likes:number; replies:number; views:number; }
+export interface BloggerReference { username:string; capturedAt:string; posts:ReferencePost[]; medianLength:number; multilineCount:number; filteredCount:number; guide:string; }
+export interface ReferenceSnapshot { references:BloggerReference[]; activeHandles:string[]; reading:boolean; lastRead?:{username:string; phase:string; spentMicros:number; uncertainMicros:number; error?:string}; }
+export interface CreatorSource { id: string; author: string; text: string; url: string; createdAt: string; likes: number; replies: number; }
+export interface CreatorDraft { id: number; runId: number; title: string; body: string; publishBody: string; topic: string; canUndoRewrite: boolean; kind: string; sources: CreatorSource[]; imageIdea: string; status: "review" | "ready" | "published" | "skipped"; scheduledAt?: string; notifiedAt?: string; publishedAt?: string; screenshot: boolean; }
+export interface CreatorRun { id: number; phase: string; config: CreatorConfig; preferences: WorkbenchPreferences; generatedCount: number; sourcesFound: number; pagesDone: number; xSpentMicros: number; aiSpentMicros: number; xUncertainMicros: number; aiUncertainMicros: number; xCapMicros: number; aiCapMicros: number; error?: string; }
+export interface CreatorSnapshot { run?: CreatorRun; drafts: CreatorDraft[]; running: boolean; todayGoal: number; todayPublished: number; totalPublished: number; overdueCount: number; preferences: WorkbenchPreferences; defaultPrompt: string; }
 
 export interface ReplyRun {
   id: number;
@@ -119,6 +146,9 @@ export interface ReplyPost {
   draft: string;
   status: "pending" | "copied" | "replied" | "skipped";
   generationError?: string;
+  runId: number;
+  repliedAt?: string;
+  openedAt?: string;
 }
 
 export interface WorkbenchSnapshot {
@@ -130,4 +160,11 @@ export interface WorkbenchSnapshot {
   article?: { id: number; topic: string; body: string; costUsd: string; capUsd: string };
   running: boolean;
   todayRepliedCount: number;
+  totalRepliedCount: number;
+  pendingCount: number;
+  preferences: WorkbenchPreferences;
+  defaultReplyPrompt: string;
+  mutualCount: number;
+  mutualCapturedAt?: string;
+  networkProgress?: string;
 }

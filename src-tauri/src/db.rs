@@ -134,8 +134,23 @@ impl AppDb {
                     "ALTER TABLE reply_posts ADD COLUMN retry_requested INTEGER NOT NULL DEFAULT 0;",
                 )?;
             }
+            for (table, column, definition) in [
+                ("reply_posts", "replied_at", "TEXT"),
+                ("reply_posts", "opened_at", "TEXT"),
+                ("reply_runs", "config_json", "TEXT"),
+                ("reply_runs", "preferences_json", "TEXT"),
+            ] {
+                let exists: bool = connection.query_row(
+                    &format!("SELECT EXISTS(SELECT 1 FROM pragma_table_info('{table}') WHERE name=?1)"),
+                    [column], |row| row.get(0),
+                )?;
+                if !exists { connection.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {definition};"))?; }
+            }
+            connection.execute_batch("UPDATE reply_posts SET replied_at=updated_at WHERE status='replied' AND replied_at IS NULL;")?;
             Ok(())
         })?;
+        crate::creator::initialise(&db)?;
+        crate::creator_reference::initialise(&db)?;
         Ok(db)
     }
 

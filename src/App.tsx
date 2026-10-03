@@ -2,9 +2,12 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 import * as api from "./api";
 import type { Bootstrap, Candidate, DecisionStatus } from "./types";
 import ReplyWorkbench from "./ReplyWorkbench";
+import SettingsPage from "./SettingsPage";
+import CreatorWorkbench from "./CreatorWorkbench";
+import SupportPanel from "./SupportPanel";
 
 type Tab = "pending" | "unfollowed" | "keep" | "later" | "changed";
-const APP_VERSION = "0.2.1";
+const APP_VERSION = "0.4.0";
 
 const labels: Record<Tab, string> = {
   pending: "全部待处理",
@@ -32,7 +35,7 @@ function decisionOf(state: Bootstrap, candidate: Candidate): DecisionStatus {
 function App() {
   const [state, setState] = useState<Bootstrap | null>(null);
   const [tab, setTab] = useState<Tab>("pending");
-  const [view, setView] = useState<"unfollow" | "replies">("unfollow");
+  const [view, setView] = useState<"unfollow" | "replies" | "create" | "settings">("unfollow");
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -131,20 +134,13 @@ function App() {
         <div className="privacy-pill"><i />{view === "unfollow" ? "人工确认，不自动取关" : "人工确认，不自动发布"}</div>
       </header>
 
-      <section className="support-panel" aria-label="支持 XUnFollow">
-        <div>
-          <p className="eyebrow">支持 XUnFollow</p>
-          <p>觉得这个本地小工具有用？欢迎在 X 上关注我们。</p>
-        </div>
-        <div className="support-links">
-          <a href="https://x.com/guoqingfeng6" onClick={(event) => { event.preventDefault(); void api.openExternalProfile("https://x.com/guoqingfeng6"); }}>关注 @guoqingfeng6 ↗</a>
-          <a href="https://x.com/NIAOBGE" onClick={(event) => { event.preventDefault(); void api.openExternalProfile("https://x.com/NIAOBGE"); }}>关注 @NIAOBGE ↗</a>
-        </div>
-      </section>
+      <SupportPanel />
 
-      <nav className="main-nav" aria-label="功能选择"><button className={view === "unfollow" ? "active" : ""} onClick={() => setView("unfollow")}>取关管理</button><button className={view === "replies" ? "active" : ""} onClick={() => setView("replies")}>X 回复工作台</button></nav>
+      <nav className="main-nav" aria-label="功能选择"><button className={view === "unfollow" ? "active" : ""} onClick={() => setView("unfollow")}>取关管理</button><button className={view === "replies" ? "active" : ""} onClick={() => setView("replies")}>X 回复工作台</button><button className={view === "create" ? "active" : ""} onClick={() => setView("create")}>创作工作台</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>设置</button></nav>
 
-      {view === "replies" ? <ReplyWorkbench ownUsername={state.account?.username} /> : <>
+      <div hidden={view !== "replies"}><ReplyWorkbench onSettings={() => setView("settings")} /></div>
+      <div hidden={view !== "create"}><CreatorWorkbench onSettings={() => setView("settings")} /></div>
+      {view === "replies" || view === "create" ? null : view === "settings" ? <SettingsPage onSaved={() => void refresh()} /> : <>
 
       <section className="stats" aria-label="处理统计">
         <Stat value={number.format(counts.pending)} label="待处理" />
@@ -158,6 +154,7 @@ function App() {
       {(!state.account && !state.pendingScan) || showSetup ? (
         <Setup
           configured={state.apiKeyConfigured}
+          onSettings={() => setView("settings")}
           pendingScan={state.pendingScan}
           onClose={() => setShowSetup(false)}
           onSaved={() => { setShowSetup(false); void refresh(); }}
@@ -298,28 +295,27 @@ function downloadProgress(state: Bootstrap) {
   URL.revokeObjectURL(url);
 }
 
-function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { configured: boolean; pendingScan?: Bootstrap["pendingScan"]; onClose: () => void; onSaved: () => void; setNotice: (message: string) => void }) {
-  // Keep the field uncontrolled and mask it with CSS. Some WebKit credential
-  // fields render autofilled bullets while exposing an empty value to the app.
-  const apiKeyInput = useRef<HTMLInputElement>(null);
-  const [keyLength, setKeyLength] = useState(0);
+function Setup({ configured, pendingScan, onSettings, onClose, onSaved, setNotice }: { configured: boolean; pendingScan?: Bootstrap["pendingScan"]; onSettings: () => void; onClose: () => void; onSaved: () => void; setNotice: (message: string) => void }) {
   const [handle, setHandle] = useState(pendingScan?.handle ?? "");
   const [cap, setCap] = useState(pendingScan?.hardCapUsd ?? "0.50");
   const [estimate, setEstimate] = useState<{ text: string; handle: string; cap: string }>();
   const [busy, setBusy] = useState(false);
+  useEffect(() => { if (!pendingScan) void api.workbenchSnapshot().then(s => setHandle(s.preferences.ownUsername)).catch(() => {}); }, []);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const apiKeyToSave = apiKeyInput.current?.value.trim() ?? "";
-    if (!apiKeyToSave && !configured) {
-      setNotice("输入框没有读取到 API Key，请清空后重新粘贴。");
+    if (!configured) {
+      setNotice("请先到设置页面保存 TwitterAPI.io Key。");
       return;
     }
     setBusy(true);
     try {
-      if (apiKeyToSave) await api.saveApiKey(apiKeyToSave);
-      const cost = await api.estimateCost(handle, cap);
-      setEstimate({ handle, cap, text: `预计费用约 $${money.format(Number(cost.estimatedUsd))}；硬上限 $${cost.hardCapUsd}。${cost.assumption}` });
+      const values = new FormData(event.currentTarget);
+      const submittedHandle = String(values.get("handle") ?? "").replace(/^@/, "");
+      const submittedCap = String(values.get("cap") ?? "");
+      setHandle(submittedHandle); setCap(submittedCap);
+      const cost = await api.estimateCost(submittedHandle, submittedCap);
+      setEstimate({ handle: submittedHandle, cap: submittedCap, text: `预计费用约 $${money.format(Number(cost.estimatedUsd))}；硬上限 $${cost.hardCapUsd}。${cost.assumption}` });
     } catch (error) { setNotice(errorMessage(error, "无法验证设置")); }
     finally { setBusy(false); }
   };
@@ -341,28 +337,10 @@ function Setup({ configured, pendingScan, onClose, onSaved, setNotice }: { confi
     finally { setBusy(false); }
   };
   return <section className="setup-panel">
-    <div><p className="eyebrow">首次设置 · 修复版 {APP_VERSION}</p><h2>用自己的 API Key 建立本地名单</h2><p>Key 仅保存在本机 XUnFollow 数据库，不上传，也不会包含在导出的进度文件中。</p></div>
+    <div><p className="eyebrow">关系名单同步 · {APP_VERSION}</p><h2>建立本地取关名单</h2><p>密钥已统一移到设置页面，这里只需要确认账号和费用上限。</p><button className="outline" onClick={onSettings}>账号与 API 设置</button></div>
     <form onSubmit={(event) => void submit(event)}>
-      <label>
-        TwitterAPI.io API Key
-        <input
-          ref={apiKeyInput}
-          className="secret-input"
-          name="apiKey"
-          type="text"
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          onInput={(event) => setKeyLength(event.currentTarget.value.length)}
-          placeholder={configured ? "已保存；留空即可复用" : "粘贴你自己的 API Key"}
-          required={!configured}
-        />
-        <span className={keyLength ? "key-readback ready" : "key-readback"}>
-          {keyLength ? `已读取 ${keyLength} 个字符，可以保存` : configured ? "已保存到本机数据库；留空可继续使用" : "尚未读取到 Key"}
-        </span>
-      </label>
-      <label>X 用户名<input value={handle} onChange={(event) => { setHandle(event.target.value.replace(/^@/, "")); setEstimate(undefined); }} placeholder="例如 guoqingfeng6" required /></label>
-      <label>本次费用硬上限（美元）<input inputMode="decimal" value={cap} onChange={(event) => { setCap(event.target.value); setEstimate(undefined); }} required /></label>
+      <label>X 用户名<input name="handle" value={handle} onChange={(event) => { setHandle(event.target.value.replace(/^@/, "")); setEstimate(undefined); }} placeholder="你的 X 用户名" required /></label>
+      <label>本次费用硬上限（美元）<input name="cap" inputMode="decimal" value={cap} onChange={(event) => { setCap(event.target.value); setEstimate(undefined); }} required /></label>
       <div className="setup-actions"><button className="outline" type="button" onClick={onClose}>取消</button><button className="open-x" disabled={busy} type="submit">保存并估算费用</button></div>
     </form>
     {estimate && <div className="estimate"><p>{estimate.text}</p><button className="next-batch" disabled={busy} onClick={() => void scan()}>确认上限，开始只读同步</button></div>}

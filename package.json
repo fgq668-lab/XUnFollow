@@ -1,17 +1,19 @@
 {
   "name": "xunfollow",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.4.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/replyQueue.test.mjs tests/creatorTime.test.mjs tests/creatorPlan.test.mjs tests/creatorWriting.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.0",
+    "@tauri-apps/plugin-notification": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.6.0",
     "@vitejs/plugin-react": "^5.0.4",
     "react": "^19.1.1",

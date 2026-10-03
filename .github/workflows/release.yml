@@ -4,13 +4,38 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - "codex/release-*"
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    name: 校验发布版本
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          node <<'JS'
+          const fs = require('fs');
+          const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+          if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('无效版本');
+          const tag = `v${version}`;
+          if (![ `refs/tags/${tag}`, `refs/heads/codex/release-${tag}` ].includes(process.env.RELEASE_REF)) {
+            throw new Error('标签或发布分支必须与 package.json 版本一致');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${tag}\n`);
+          JS
+
   build-macos:
     name: macOS (${{ matrix.name }})
+    needs: version
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -34,8 +59,14 @@ jobs:
           targets: ${{ matrix.target }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - run: pnpm test
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: pnpm tauri build --bundles dmg --target ${{ matrix.target }}
+      - name: 验证 DMG 中的应用签名
+        run: |
+          hdiutil attach -nobrowse src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          codesign --verify --deep --strict /Volumes/XUnFollow/XUnFollow.app
+          hdiutil detach /Volumes/XUnFollow
       - uses: actions/upload-artifact@v4
         with:
           name: xunfollow-macos-${{ matrix.target }}
@@ -44,6 +75,7 @@ jobs:
 
   build-windows:
     name: Windows (x64)
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +89,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - run: pnpm test
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: pnpm tauri build --bundles nsis
       - uses: actions/upload-artifact@v4
@@ -67,7 +100,7 @@ jobs:
 
   publish:
     name: 创建 GitHub Release
-    needs: [build-macos, build-windows]
+    needs: [version, build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -76,6 +109,9 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.version.outputs.tag }} · 回复与创作工作台
           generate_release_notes: true
           body: |
             ## XUnFollow 桌面版
@@ -84,7 +120,33 @@ jobs:
             - **Intel Mac**：下载 `x86_64-apple-darwin` 的 DMG。
             - **Windows 10/11 x64**：下载 `.exe` 安装包。
 
-            这是本地优先应用：名单、回复草稿、处理进度和 API Key 只保存在用户电脑。X 回复工作台可按关键词搜索并用自己的 DeepSeek 官方 Key 生成草稿；生成时选中帖子与人设会发送到 DeepSeek 官方 API。应用不会自动取关或发帖；请在外部 X 页面自行确认操作。
+            ### 本次更新
+
+            - 创作工作台支持多主题批量生成、北京时间排期、发布目标与进度、截图二次创作。
+            - 不满意旧稿时，可明确确认「放弃全部未发布草稿，重新生成」；旧稿进入「已跳过」，可恢复，已发布进度不变。
+            - 支持通过 TwitterAPI.io 读取一页参考博主公开内容，缓存到本机，借鉴写法而不照搬；再次生成沿用缓存。
+            - 优化口语化提示词、主题轮换与纯文本排版，复制时保留空行；支持可恢复的单条口语改写。
+            - 回复工作台保留互关动态、中文优先、每日目标、批量草稿与跨批次去重。
+
+            名单、草稿、进度和 API Key 保存在用户电脑。Key 在本机 SQLite 中未额外加密，请保护应用数据目录。生成时选中帖子、参考样本、人设和提示词会发送到 DeepSeek 官方 API。应用不操作 X 页面、不自动取关或发布；请自己发布后回来标记。
+
+            ### 界面预览
+
+            ![X 回复工作台](https://raw.githubusercontent.com/fgq668-lab/XUnFollow/${{ needs.version.outputs.tag }}/docs/images/reply-workbench.png)
+
+            ![创作工作台](https://raw.githubusercontent.com/fgq668-lab/XUnFollow/${{ needs.version.outputs.tag }}/docs/images/creator-workbench.png)
+
+            ![设置](https://raw.githubusercontent.com/fgq668-lab/XUnFollow/${{ needs.version.outputs.tag }}/docs/images/settings.png)
+
+            ### 关注与支持
+
+            [关注作者 @guoqingfeng6](https://x.com/guoqingfeng6) · [项目首页与使用步骤](https://github.com/fgq668-lab/XUnFollow)
+
+            自愿打赏，请核对链与完整地址；下面仅为地址查询链接，不会自动转账：
+
+            - BSC：[0xD14fd8765c21c2b97539BEE00189f8118AAdbe52](https://bscscan.com/address/0xD14fd8765c21c2b97539BEE00189f8118AAdbe52)
+            - SOL：[CmNkNVkobbHAyn3jsaEBaJoAcaNbrTyo7vUwSaSmrVme](https://solscan.io/account/CmNkNVkobbHAyn3jsaEBaJoAcaNbrTyo7vUwSaSmrVme)
+            - DOGE：[DQUXapWhCKUbiNX7YJkeTNE1q3zCQAzriV](https://dogechain.info/address/DQUXapWhCKUbiNX7YJkeTNE1q3zCQAzriV)
 
             当前安装包尚未使用 Apple Developer ID 或 Windows 代码签名证书。系统首次打开可能显示未知开发者提示；请仅从本 Release 下载，并在确认仓库来源后继续安装。
           files: release-assets/*

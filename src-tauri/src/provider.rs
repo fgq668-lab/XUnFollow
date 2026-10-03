@@ -153,7 +153,7 @@ impl TwitterApiIo {
     }
 
     #[cfg(test)]
-    fn with_test_base_url(base_url: String) -> Self {
+    pub(crate) fn with_test_base_url(base_url: String) -> Self {
         Self {
             client: Client::builder()
                 .timeout(std::time::Duration::from_secs(5))
@@ -382,7 +382,11 @@ impl TwitterApiIo {
         })
     }
 
-    async fn follower_ids(&self, handle: &str, cursor_value: &str) -> Result<IdPage, AppError> {
+    pub(crate) async fn follower_ids(
+        &self,
+        handle: &str,
+        cursor_value: &str,
+    ) -> Result<IdPage, AppError> {
         let mut params = vec![("userName", handle), ("count", "5000")];
         if !cursor_value.is_empty() {
             params.push(("cursor", cursor_value));
@@ -408,7 +412,11 @@ impl TwitterApiIo {
         })
     }
 
-    async fn followings(&self, handle: &str, cursor_value: &str) -> Result<ProfilePage, AppError> {
+    pub(crate) async fn followings(
+        &self,
+        handle: &str,
+        cursor_value: &str,
+    ) -> Result<ProfilePage, AppError> {
         let mut params = vec![("userName", handle), ("pageSize", "200")];
         if !cursor_value.is_empty() {
             params.push(("cursor", cursor_value));
@@ -547,15 +555,15 @@ fn snapshot_from_state(
     ))
 }
 
-struct IdPage {
-    ids: Vec<String>,
-    has_next: bool,
-    next_cursor: String,
+pub(crate) struct IdPage {
+    pub ids: Vec<String>,
+    pub has_next: bool,
+    pub next_cursor: String,
 }
-struct ProfilePage {
-    profiles: Vec<Candidate>,
-    has_next: bool,
-    next_cursor: String,
+pub(crate) struct ProfilePage {
+    pub profiles: Vec<Candidate>,
+    pub has_next: bool,
+    pub next_cursor: String,
 }
 
 fn validate_handle(handle: &str) -> Result<(), AppError> {
@@ -684,7 +692,7 @@ fn validate_cursor(has_next: bool, cursor: &str, seen: &[String]) -> Result<(), 
     Ok(())
 }
 
-fn ids_page_cost(count: usize) -> Result<i64, AppError> {
+pub(crate) fn ids_page_cost(count: usize) -> Result<i64, AppError> {
     let value = if count >= 4000 {
         ((count as i64) * 9 + 1) / 2
     } else if count >= 200 {
@@ -694,7 +702,7 @@ fn ids_page_cost(count: usize) -> Result<i64, AppError> {
     };
     Ok(value.max(1000))
 }
-fn profile_page_cost(count: usize) -> Result<i64, AppError> {
+pub(crate) fn profile_page_cost(count: usize) -> Result<i64, AppError> {
     let value = if count >= 200 {
         (count as i64) * 10
     } else if count >= 100 {
