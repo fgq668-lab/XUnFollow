@@ -124,8 +124,8 @@ v0.2.3 会自动升级旧版回复数据库，保留已有草稿和取关进度�
 
 | 你的电脑 | 下载哪个文件 |
 | --- | --- |
-| Mac，M1/M2/M3/M4 芯片 | 文件名含 `aarch64-apple-darwin` 的 `.dmg` |
-| Mac，Intel 芯片 | 文件名含 `x86_64-apple-darwin` 的 `.dmg` |
+| Mac，M1/M2/M3/M4 芯片 | 文件名含 `aarch64` 的 `.dmg` |
+| Mac，Intel 芯片 | 文件名含 `x64` 的 `.dmg` |
 | Windows 10/11，64 位 | `.exe`（NSIS 安装程序） |
 
 当前开源版本使用 ad-hoc 构建，尚未配置 Apple Developer ID 公证或 Windows 商业代码签名。因此系统可能在首次打开时显示“无法验证开发者”或“Windows 已保护你的电脑”。请只从本仓库的 Release 下载，并核对发布版本；正式面向广泛用户分发前，建议配置两端的代码签名。

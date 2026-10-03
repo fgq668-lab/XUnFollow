@@ -116,8 +116,8 @@ jobs:
           body: |
             ## XUnFollow 桌面版
 
-            - **Apple Silicon Mac（M1/M2/M3/M4）**：下载 `aarch64-apple-darwin` 的 DMG。
-            - **Intel Mac**：下载 `x86_64-apple-darwin` 的 DMG。
+            - **Apple Silicon Mac（M1/M2/M3/M4）**：下载文件名含 `aarch64` 的 DMG。
+            - **Intel Mac**：下载文件名含 `x64` 的 DMG。
             - **Windows 10/11 x64**：下载 `.exe` 安装包。
 
             ### 本次更新
